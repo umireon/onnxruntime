@@ -75,6 +75,9 @@
 #endif
 #ifdef ENABLE_TRAINING
 #include "orttraining/core/optimizer/memory_optimizer.h"
+#ifdef USE_CUDA
+#include "orttraining/core/optimizer/triton_fusion.h"
+#endif  // USE_CUDA
 #endif
 
 #endif  // !defined(ORT_MINIMAL_BUILD)
@@ -315,6 +318,11 @@ InlinedVector<std::unique_ptr<GraphTransformer>> GenerateTransformers(
       transformers.emplace_back(std::make_unique<QDQFinalCleanupTransformer>(enable_quant_qdq_cleanup));
 
 #ifdef ENABLE_TRAINING
+#ifdef USE_CUDA
+      transformers.emplace_back(
+          std::make_unique<TritonFusion>(InlinedHashSet<std::string_view>{onnxruntime::kCudaExecutionProvider}));
+#endif  // USE_CUDA
+
       // Put memory optimization transformer at last (which is done after most of fusions are done) by intention.
       // Known issue: after memory optimization is completed, if some fusion happens, it is possible that the
       // node priority got changed. This may disorder the execution order of nodes to recompute.
