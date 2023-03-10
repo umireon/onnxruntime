@@ -52,6 +52,14 @@ steps:
         pythonInterpreter: /usr/bin/python3
       displayName: patch manylinux
 
+- script: |
+    set -ex
+    mkdir -p "${{ parameters.IMAGE_CACHE_DIR }}"
+    docker save -o "${{ parameters.IMAGE_CACHE_DIR }}/cache.tar" ${{ parameters.Repository }}
+    docker image ls
+    docker system df
+  displayName: Check Docker Images
+
 - ${{ if eq(parameters.UseImageCacheContainerRegistry, true) }}:
   - template: with-container-registry-steps.yml
     parameters:
