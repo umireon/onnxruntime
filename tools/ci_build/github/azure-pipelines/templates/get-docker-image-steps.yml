@@ -53,9 +53,6 @@ steps:
       displayName: patch manylinux
 
 - script: |
-    set -ex
-    mkdir -p "${{ parameters.IMAGE_CACHE_DIR }}"
-    docker save -o "${{ parameters.IMAGE_CACHE_DIR }}/cache.tar" ${{ parameters.Repository }}
     docker image ls
     docker system df
   displayName: Check Docker Images
