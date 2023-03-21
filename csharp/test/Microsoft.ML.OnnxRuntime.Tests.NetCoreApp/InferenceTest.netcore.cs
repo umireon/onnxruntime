@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Xunit;
 
@@ -40,8 +41,8 @@ namespace Microsoft.ML.OnnxRuntime.Tests
             {
                 Assert.NotNull(session);
                 Assert.NotNull(session.InputMetadata);
-                Assert.Equal(1, session.InputMetadata.Count); // 1 input node
-                Assert.True(session.InputMetadata.ContainsKey("data_0")); // input node name
+                Assert.Equal(1, session.InputMetadata.Count); // 1 input nodeMeta
+                Assert.True(session.InputMetadata.ContainsKey("data_0")); // input nodeMeta name
                 Assert.Equal(typeof(float), session.InputMetadata["data_0"].ElementType);
                 Assert.True(session.InputMetadata["data_0"].IsTensor);
                 var expectedInputDimensions = new int[] { 1, 3, 224, 224 };
@@ -52,8 +53,8 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                 }
 
                 Assert.NotNull(session.OutputMetadata);
-                Assert.Equal(1, session.OutputMetadata.Count); // 1 output node
-                Assert.True(session.OutputMetadata.ContainsKey("softmaxout_1")); // output node name
+                Assert.Equal(1, session.OutputMetadata.Count); // 1 output nodeMeta
+                Assert.True(session.OutputMetadata.ContainsKey("softmaxout_1")); // output nodeMeta name
                 Assert.Equal(typeof(float), session.OutputMetadata["softmaxout_1"].ElementType);
                 Assert.True(session.OutputMetadata["softmaxout_1"].IsTensor);
                 var expectedOutputDimensions = new int[] { 1, 1000, 1, 1 };
@@ -248,7 +249,7 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                 { "fp16_coreml_LinearRegression_NYCTaxi", "Error in Node:featureVectorizer : No Op registered for FeatureVectorizer with domain_version of 1"},
                 { "test_bidaf", "Does not run in opset9, runs in other opsets. The model runs but I don't have a data set to debug output locally. Tensors of type ElementType not currently supported in the LoadTensorFromFile." },
                 { "test_mnist", "Does not run in opset9, runs in other opsets. The model runs but I don't have a data set to debug output locally. Tensors of type ElementType not currently supported in the LoadTensorFromFile" },
-                { "BERT_Squad", "Could not find an implementation for the node bert / embeddings / one_hot:OneHot(9)" },
+                { "BERT_Squad", "Could not find an implementation for the nodeMeta bert / embeddings / one_hot:OneHot(9)" },
                 { "mlperf_ssd_mobilenet_300", "Could not find file output_0.pb" },
                 { "tf_resnet_v1_50", "result mismatch when Conv BN Fusion is applied" },
                 { "tf_resnet_v1_101", "result mismatch when Conv BN Fusion is applied" },
@@ -256,60 +257,58 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                 { "cntk_simple_seg", "Bad onnx test output caused by wrong SAME_UPPER/SAME_LOWER for ConvTranspose" },
                 { "coreml_Imputer-LogisticRegression_sklearn_load_breast_cancer", "Can't determine model file name" },
                 { "mask_rcnn_keras", "Model should be edited to remove the extra outputs" },
-                { "test_max_float64", "node test error"},
-                { "test_min_uint8", "node test error"},
-                { "test_mod_mixed_sign_float64", "node test error"},
-                { "test_momentum", "node test error"},
-                { "test_max_uint16", "node test error"},
-                { "test_resize_downsample_scales_linear_align_corners", "node test error"},
-                { "test_adagrad_multiple", "node test error"},
-                { "test_einsum_inner_prod", "node test error"},
-                { "test_sequence_insert_at_back", "node test error"},
-                { "test_mod_mixed_sign_int8", "node test error"},
-                { "test_maxunpool_export_with_output_shape", "node test error"},
-                { "test_min_int16", "node test error"},
-                { "test_adagrad", "node test error"},
-                { "test_min_float64", "node test error"},
-                { "test_max_int16", "node test error"},
-                { "test_sequence_insert_at_front", "node test error"},
-                { "test_training_dropout_default", "node test error"},
-                { "test_training_dropout", "node test error"},
-                { "test_adam", "node test error"},
-                { "test_training_dropout_mask", "node test error"},
-                { "test_clip_default_int8_inbounds", "node test error"},
-                { "test_eyelike_with_dtype", "node test error"},
-                { "test_cast_STRING_to_FLOAT", "node test error"},
-                { "test_cast_FLOAT_to_DOUBLE", "node test error"},
-                { "test_cast_BFLOAT16_to_FLOAT", "node test error"},
-                { "test_cast_FLOAT_to_BFLOAT16", "node test error"},
+                { "test_min_uint8", "nodeMeta test error"},
+                { "test_momentum", "nodeMeta test error"},
+                { "test_max_uint16", "Could not find an implementation for Max(13) nodeMeta with name '"},
+                { "test_resize_downsample_scales_linear_align_corners", "nodeMeta test error"},
+                { "test_adagrad_multiple", "nodeMeta test error"},
+                { "test_einsum_inner_prod", "nodeMeta test error"},
+                { "test_sequence_insert_at_back", "nodeMeta test error"},
+                { "test_mod_mixed_sign_int8", "nodeMeta test error"},
+                { "test_maxunpool_export_with_output_shape", "nodeMeta test error"},
+                { "test_min_int16", "nodeMeta test error"},
+                { "test_adagrad", "nodeMeta test error"},
+                { "test_min_float64", "nodeMeta test error"},
+                { "test_max_int16", "nodeMeta test error"},
+                { "test_sequence_insert_at_front", "nodeMeta test error"},
+                { "test_training_dropout_default", "nodeMeta test error"},
+                { "test_training_dropout", "nodeMeta test error"},
+                { "test_adam", "nodeMeta test error"},
+                { "test_training_dropout_mask", "nodeMeta test error"},
+                { "test_clip_default_int8_inbounds", "nodeMeta test error"},
+                { "test_eyelike_with_dtype", "nodeMeta test error"},
+                { "test_cast_STRING_to_FLOAT", "nodeMeta test error"},
+                { "test_cast_FLOAT_to_DOUBLE", "nodeMeta test error"},
+                { "test_cast_BFLOAT16_to_FLOAT", "nodeMeta test error"},
+                { "test_cast_FLOAT_to_BFLOAT16", "nodeMeta test error"},
                 { "test_cast_FLOAT_to_STRING", "Output strings can not be compared exactly"},
-                { "test_castlike_STRING_to_FLOAT", "node test error"},
-                { "test_castlike_STRING_to_FLOAT_expanded", "node test error"},
-                { "test_castlike_FLOAT16_to_DOUBLE", "node test error"},
-                { "test_castlike_FLOAT16_to_DOUBLE_expanded", "node test error"},
-                { "test_castlike_FLOAT_to_DOUBLE", "node test error"},
-                { "test_castlike_FLOAT_to_DOUBLE_expanded", "node test error"},
+                { "test_castlike_STRING_to_FLOAT", "nodeMeta test error"},
+                { "test_castlike_STRING_to_FLOAT_expanded", "nodeMeta test error"},
+                { "test_castlike_FLOAT16_to_DOUBLE", "nodeMeta test error"},
+                { "test_castlike_FLOAT16_to_DOUBLE_expanded", "nodeMeta test error"},
+                { "test_castlike_FLOAT_to_DOUBLE", "nodeMeta test error"},
+                { "test_castlike_FLOAT_to_DOUBLE_expanded", "nodeMeta test error"},
                 { "test_castlike_BFLOAT16_to_FLOAT", "Length is expected to be equal to Count (metadata and expected data mismatch) "},
                 { "test_castlike_BFLOAT16_to_FLOAT_expanded", "Length is expected to be equal to Count metadata and expected data mismatch"},
-                { "test_castlike_FLOAT_to_BFLOAT16", "node test error"},
-                { "test_castlike_FLOAT_to_BFLOAT16_expanded", "node test error"},
-                { "test_castlike_FLOAT_to_STRING", "node test error"},
-                { "test_castlike_FLOAT_to_STRING_expanded", "node test error"},
-                { "test_bitshift_right_uint16", "node test error"},
-                { "test_bitshift_left_uint16", "node test error"},
-                { "test_pow_types_float32_uint64", "node test error"},
-                { "test_max_uint8", "node test error"},
-                { "test_momentum_multiple", "node test error"},
-                { "test_pow_types_float32_uint32", "node test error"},
+                { "test_castlike_FLOAT_to_BFLOAT16", "Length is expected to be equal to Count. Testdata dims length do not match that of model metadata"},
+                { "test_castlike_FLOAT_to_BFLOAT16_expanded", "Length is expected to be equal to Count"},
+                { "test_castlike_FLOAT_to_STRING", "string comparison does not match due to float rounding"},
+                { "test_castlike_FLOAT_to_STRING_expanded", "string comparison does not match due to float rounding"},
+                { "test_bitshift_right_uint16", "Could not find an implementation for BitShift(11) nodeMeta with name ''"},
+                { "test_bitshift_left_uint16", "nodeMeta test error"},
+                { "test_pow_types_float32_uint64", "nodeMeta test error"},
+                { "test_max_uint8", "nodeMeta test error"},
+                { "test_momentum_multiple", "nodeMeta test error"},
+                { "test_pow_types_float32_uint32", "nodeMeta test error"},
                 { "test_if_seq", "sequence type is not supported in test infra."},
-                { "test_resize_downsample_scales_cubic_align_corners", "node test error"},
-                { "test_einsum_batch_matmul", "node test error"},
-                { "test_nesterov_momentum", "node test error"},
-                { "test_min_uint16", "node test error"},
-                { "test_adam_multiple", "node test error"},
+                { "test_resize_downsample_scales_cubic_align_corners", "nodeMeta test error"},
+                { "test_einsum_batch_matmul", "nodeMeta test error"},
+                { "test_nesterov_momentum", "nodeMeta test error"},
+                { "test_min_uint16", "nodeMeta test error"},
+                { "test_adam_multiple", "nodeMeta test error"},
                 { "test_loop13_seq", "sequence type is not supported in test infra." },
-                { "test_training_dropout_default_mask", "node test error"},
-                { "test_min_int8", "node test error"},
+                { "test_training_dropout_default_mask", "nodeMeta test error"},
+                { "test_min_int8", "nodeMeta test error"},
                 { "test_identity_sequence", "data type not supported"},
                 { "test_gru_batchwise", "batchwise operations not supported"},
                 { "test_lstm_batchwise", "batchwise operations not supported"},
@@ -343,8 +342,11 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                 { "YOLOv3-12-int8", "training_domain"},
                 // the expansion of Softplus uses Exp(1). ORT has a Softplus kernel, so testing the expansion is
                 // unnecessary and fails as ORT support for Exp started at opset 6 (as ORT didn't exist until opset 7).
+                { "test_add_uint8", "Opset18 Could not find an implementation for Add(14) nodeMeta with name ''"},
+                { "test_clip_default_int8_max_expanded", "Could not find an implementation for Less(13) nodeMeta with name ''" },
                 { "test_softplus_example_expanded", "Not applicable"},
                 { "test_softplus_expanded", "Not applicable"},
+                { "test_div_uint8", "Could not find an implementation for Div(14) nodeMeta with name ''"},
                 { "test_col2im_pads", "due to a typo in test data"},
                 { "test_optional_has_element_empty_optional_input", "C# API doesn't support optional input"},
                 { "test_optional_get_element_optional_tensor", "C# API doesn't support optional input"},
@@ -453,6 +455,42 @@ namespace Microsoft.ML.OnnxRuntime.Tests
             }
         }
 
+        string MatchInputOutputWithFile(string fileName, InferenceSession session, bool input, out NodeMetadata result)
+        {
+            string nodeName = string.Empty;
+            result = null;
+            var names = (input) ? session.InputNames : session.OutputNames;
+            var metadata = (input) ? session.InputMetadata : session.OutputMetadata;
+            string regEx = (input) ? @"input_(\d{1,}).pb" : @"output_(\d{1,}).pb";
+
+            // Extract the number from the file name, if not try to match the input/output name with the name of the file.
+            try
+            {
+                // captures start at index 1
+                var group = Regex.Matches(fileName, regEx).Single().Groups[1];
+                var num = int.Parse(group.Value);
+                if(num >= 0 && num < names.Count)
+                {
+                    nodeName = names[num];
+                    result = metadata[nodeName];
+                }
+            } catch(Exception)
+            {
+                // Either does not match or can not parse the number
+            }
+
+            if(result is null)
+            {
+                // try matching the file name directly against the input/output name
+                if (!metadata.TryGetValue(fileName, out result))
+                {
+                    throw new ArgumentException($"Unable to match file: {fileName} to input/output metadata");
+                }
+                nodeName = fileName;
+            }
+            return nodeName;
+        }
+
         [Theory(DisplayName = "TestPreTrainedModels")]
         [MemberData(nameof(GetModelsForTest))]
         [MemberData(nameof(GetSkippedModelForTest), Skip = "Skipped due to Error, please fix the error and enable the test")]
@@ -494,6 +532,7 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                 using (var session = new InferenceSession(onnxModelFileName))
                 {
                     var inMeta = session.InputMetadata;
+                    var outMeta = session.OutputMetadata;
                     string testDataDirNamePattern = "test_data*";
                     if (opset == "opset9" && modelName == "LSTM_Seq_lens_unpacked")
                     {
@@ -501,15 +540,19 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                     }
                     foreach (var testDataDir in modelDir.EnumerateDirectories(testDataDirNamePattern))
                     {
-                        var inputContainer = new List<NamedOnnxValue>();
-                        var outputContainer = new List<NamedOnnxValue>();
+                        var inputContainer = new List<NamedOnnxValue>(inMeta.Count);
+                        var outputContainer = new List<NamedOnnxValue>(outMeta.Count);
                         foreach (var f in testDataDir.EnumerateFiles("input_*.pb"))
                         {
-                            inputContainer.Add(TestDataLoader.LoadTensorFromFilePb(f.FullName, inMeta));
+                            NodeMetadata nodeMeta;
+                            var nodeName = MatchInputOutputWithFile(f.Name, session, true, out nodeMeta);
+                            inputContainer.Add(TestDataLoader.LoadOnnxValueFromFilePb(f.FullName, nodeName, nodeMeta));
                         }
                         foreach (var f in testDataDir.EnumerateFiles("output_*.pb"))
                         {
-                            outputContainer.Add(TestDataLoader.LoadTensorFromFilePb(f.FullName, session.OutputMetadata));
+                            NodeMetadata nodeMeta;
+                            var nodeName = MatchInputOutputWithFile(f.Name, session, false, out nodeMeta);
+                            outputContainer.Add(TestDataLoader.LoadOnnxValueFromFilePb(f.FullName, nodeName, nodeMeta));
                         }
 
                         using (var resultCollection = session.Run(inputContainer))

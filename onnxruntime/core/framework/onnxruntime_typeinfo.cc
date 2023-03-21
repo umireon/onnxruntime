@@ -85,7 +85,7 @@ ORT_API_STATUS_IMPL(OrtApis::CastTypeInfoToSequenceTypeInfo, _In_ const OrtTypeI
 ORT_API_STATUS_IMPL(OrtApis::CastTypeInfoToOptionalTypeInfo, _In_ const OrtTypeInfo* type_info,
   _Outptr_result_maybenull_ const OrtOptionalTypeInfo** out) {
   API_IMPL_BEGIN
-  *out = (type_info->type != ONNX_TYPE_OPTIONAL) ? type_info->optional_type_info.get() : nullptr;
+  *out = (type_info->type == ONNX_TYPE_OPTIONAL) ? type_info->optional_type_info.get() : nullptr;
   return nullptr;
   API_IMPL_END
 }
