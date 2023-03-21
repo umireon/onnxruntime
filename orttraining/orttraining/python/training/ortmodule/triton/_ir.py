@@ -16,7 +16,7 @@ import sympy
 from sympy.codegen.rewriting import create_expand_pow_optimization
 
 from ._common import TENSOR_TYPE_TO_NP_TYPE, CodeGenContext, HardwareContext, NodeVisitor, SpecialVar
-from ._node_sets import ElementWiseNodeSet, ReduceNodeSetInternal
+from ._op_config import is_elementwise_node, is_reduction_node
 from ._sympy_utils import FloorDiv, sympy_dot, sympy_symbol
 
 
@@ -204,7 +204,7 @@ class ExecutionBlock(IRNode):
 
     def extract_shape(self, group: List[IRNode]):
         assert len(group[-1].output_with_shapes) == 1
-        if group[-1] in ReduceNodeSetInternal():
+        if is_reduction_node(group[-1]):
             shape = []
             for i in list(group[-1].input_with_shapes.values())[0][1]:
                 ri = re.sub(r"[^a-zA-Z0-9_]+", "_", i) if isinstance(i, str) else i
@@ -500,7 +500,7 @@ class InterGroupStrategy(object):
         self.count = 0
 
     def can_fusion(self, node1, node2):
-        if node1.op_type in ElementWiseNodeSet():
+        if is_elementwise_node(node1.op_type):
             return True
         return False
 

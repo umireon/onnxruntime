@@ -1,6 +1,7 @@
 import functools
 import hashlib
 import itertools
+import json
 import os
 import sys
 import types
@@ -14,6 +15,7 @@ from onnxruntime.tools.symbolic_shape_infer import SymbolicShapeInference
 
 from ._codecache import PyCodeCache
 from ._codegen import codegen
+from ._node_sets import get_supported_ops
 
 
 def _process_onnx_model(onnx_str: bytes, input_shapes: List[List[int]]) -> bytes:
@@ -66,6 +68,11 @@ def _gen_module(onnx_str: bytes, debug_mode: bool) -> Tuple[str, types.ModuleTyp
     return func_name, PyCodeCache().load(src_code)
 
 
+def get_config():
+    config = {"ops": get_supported_ops(), "initializer": "scalar"}
+    return json.dumps(config)
+
+
 def execute_triton_op(func_name: str, onnx_str: bytes, *tensors):
     torch_tensors = [_from_dlpack(tensor) for tensor in tensors]
     if not onnx_str:
@@ -76,11 +83,17 @@ def execute_triton_op(func_name: str, onnx_str: bytes, *tensors):
             return tuple([to_dlpack(tensor) for tensor in output])
         return to_dlpack(output)
 
-    concrete_shapes = [list(tensor.size()) for tensor in torch_tensors]
-    new_onnx_str = _process_onnx_model(onnx_str, concrete_shapes)
-    func_name, mod = _gen_module(new_onnx_str, True)
-    func = getattr(mod, f"launch_{func_name}")
-    outputs = func(torch_tensors)
+    try:
+        concrete_shapes = [list(tensor.size()) for tensor in torch_tensors]
+        new_onnx_str = _process_onnx_model(onnx_str, concrete_shapes)
+        func_name, mod = _gen_module(new_onnx_str, True)
+        func = getattr(mod, f"launch_{func_name}")
+        outputs = func(torch_tensors)
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        raise e
     if len(outputs) == 1:
         return to_dlpack(outputs[0])
     return tuple([to_dlpack(output) for output in outputs])

@@ -549,8 +549,9 @@ void addObjectMethodsForTraining(py::module& m, ExecutionProviderRegistrationFn 
         return false;
 #endif
   });
-  m.def("register_triton_op_executor",
-        [](py::object obj) -> void { onnxruntime::contrib::TritonOpExecutor::Instance().Initialize(obj.ptr()); });
+  m.def("register_triton_op_executor", [](py::object config_getter, py::object executor) -> void {
+    onnxruntime::contrib::TritonOpExecutor::Instance().Initialize(config_getter.ptr(), executor.ptr());
+  });
 
   py::class_<TrainingConfigurationResult> config_result(m, "TrainingConfigurationResult", "pbdoc(Configuration result for training.)pbdoc");
   config_result.def(py::init())

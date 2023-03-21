@@ -3,7 +3,8 @@
 
 #ifdef USE_CUDA
 
-#include <fstream>
+#include <nlohmann/json.hpp>
+#include <string_view>
 
 #include "orttraining/core/optimizer/triton_fusion.h"
 
@@ -15,53 +16,18 @@
 #include "core/providers/partitioning_utils.h"
 
 using namespace ONNX_NAMESPACE;
+using json = nlohmann::json;
 
 namespace onnxruntime {
 
 namespace {
 
-using OpSetVersionList = std::initializer_list<OperatorSetVersion>;
 using SizeTypeVec = InlinedVector<size_t>;
 using NodeVec = InlinedVector<Node*>;
 using NodeArgVec = InlinedVector<NodeArg*>;
 using ConstNodeArgVec = InlinedVector<const NodeArg*>;
 using NodeArgSet = InlinedHashSet<NodeArg*>;
 using IsSupportedFunc = std::function<bool(const Graph&, const Node&)>;
-
-struct OpInfo {
-  OpInfo(const char* op_type, const OpSetVersionList& supported_versions, const char* domain, const bool is_no_op,
-         IsSupportedFunc is_supported_func)
-      : op_type_(op_type),
-        supported_versions_(supported_versions),
-        domain_(domain),
-        is_no_op_(is_no_op),
-        is_supported_func_(is_supported_func){};
-
-  std::string op_type_;
-  OpSetVersionList supported_versions_;
-  std::string domain_;
-  bool is_no_op_;
-  IsSupportedFunc is_supported_func_;
-};
-
-const OpSetVersionList OpSetV1 = {1};
-const OpSetVersionList OpSetV13_14 = {13, 14};
-const OpSetVersionList OpSetV9 = {9};
-const OpSetVersionList OpSetV13 = {13};
-IsSupportedFunc default_is_supported = [](const Graph&, const Node&) { return true; };
-const InlinedHashMap<std::string, OpInfo> kSupportedOps{
-    {"Add", OpInfo("Add", OpSetV13_14, kOnnxDomain, false, default_is_supported)},
-    {"Sub", OpInfo("Sub", OpSetV13_14, kOnnxDomain, false, default_is_supported)},
-    {"Mul", OpInfo("Mul", OpSetV13_14, kOnnxDomain, false, default_is_supported)},
-    {"Div", OpInfo("Div", OpSetV13_14, kOnnxDomain, false, default_is_supported)},
-    {"Where", OpInfo("Where", OpSetV9, kOnnxDomain, false, default_is_supported)},
-    // {"Cast", OpInfo("Cast", OpSetV13, kOnnxDomain, false, default_is_supported)},
-    // {"Reshape", OpInfo("Reshape", OpSetV13_14, kOnnxDomain, true, default_is_supported)},
-    // {"Squeeze", OpInfo("Squeeze", OpSetV13, kOnnxDomain, true, default_is_supported)},
-    // {"Unsqueeze", OpInfo("Unsqueeze", OpSetV13, kOnnxDomain, true, default_is_supported)},
-    {"Softmax", OpInfo("Softmax", OpSetV13, kOnnxDomain, false, default_is_supported)},
-    {"SoftmaxGrad_13", OpInfo("SoftmaxGrad_13", OpSetV1, kMSDomain, false, default_is_supported)},
-};
 
 struct Partition {
   NodeVec nodes;
@@ -76,10 +42,10 @@ struct Partition {
     output_ref_count += other.output_ref_count;
   }
 
-  bool IsValid() const {
+  bool IsValid(const TritonFusionConfig& config) const {
     size_t count = 0;
     for (const auto& node : nodes) {
-      if (!kSupportedOps.at(node->OpType()).is_no_op_) {
+      if (!config.IsNoOp(*node)) {
         ++count;
         if (count >= 2) return true;
       }
@@ -90,17 +56,40 @@ struct Partition {
 
 }  // namespace
 
-bool TritonFusion::IsSupportedNode(const Graph& graph, const Node& node) const {
+void from_json(const json& j, TritonFusionConfig::OpInfo& op_info) {
+  j.at("domain").get_to(op_info.domain);
+  j.at("versions").get_to(op_info.versions);
+  j.at("is_no_op").get_to(op_info.is_no_op);
+  j.at("conditions").get_to(op_info.conditions);
+}
+
+TritonFusionConfig::TritonFusionConfig(std::string_view config_json) {
+  const auto& config = json::parse(config_json);
+  if (config.contains("ops")) {
+    ops = config.at("ops").get<std::unordered_map<std::string, OpInfo>>();
+  }
+  if (config.contains("initializer")) {
+    initializer = config.at("initializer").get<std::string>();
+  }
+}
+
+bool TritonFusionConfig::IsSupported(const Node& node) const {
   const auto& op_type = node.OpType();
-  if (!graph_utils::IsSupportedProvider(node, GetCompatibleExecutionProviders()) ||
-      kSupportedOps.find(op_type) == kSupportedOps.end()) {
+  if (ops.find(op_type) == ops.end()) {
     return false;
   }
 
-  const auto& op_info = kSupportedOps.at(op_type);
-  return graph_utils::IsSupportedOptypeVersionAndDomain(node, op_info.op_type_, op_info.supported_versions_,
-                                                        op_info.domain_) &&
-         op_info.is_supported_func_(graph, node);
+  const auto& op_info = ops.at(op_type);
+  if (!graph_utils::IsSupportedOptypeVersionAndDomain(node, op_type, op_info.versions, op_info.domain)) {
+    return false;
+  }
+  // TODO: check attribute.
+  return true;
+}
+
+bool TritonFusionConfig::IsNoOp(const Node& node) const {
+  const auto& op_type = node.OpType();
+  return ops.find(op_type) != ops.end() && ops.at(op_type).is_no_op;
 }
 
 Status TritonFusion::ApplyImpl(Graph& graph, bool& modified, int graph_level, const logging::Logger& logger) const {
@@ -116,7 +105,8 @@ Status TritonFusion::ApplyImpl(Graph& graph, bool& modified, int graph_level, co
     auto& node = *p_node;
     ORT_RETURN_IF_ERROR(Recurse(node, modified, graph_level, logger));
 
-    bool is_supported = IsSupportedNode(graph, node);
+    bool is_supported =
+        graph_utils::IsSupportedProvider(node, GetCompatibleExecutionProviders()) && config.IsSupported(node);
     SizeTypeVec partitions_to_merge;
     for (auto& pair : partitions) {
       auto& partition = pair.second;
@@ -166,7 +156,7 @@ Status TritonFusion::ApplyImpl(Graph& graph, bool& modified, int graph_level, co
     SizeTypeVec partitions_to_erase;
     for (auto& pair : partitions) {
       if (pair.second.output_ref_count == 0) {
-        if (pair.second.IsValid()) {
+        if (pair.second.IsValid(config)) {
           pair.second.outputs.clear();
           pair.second.dependencies.clear();
           partitions_to_fuse.emplace(pair);

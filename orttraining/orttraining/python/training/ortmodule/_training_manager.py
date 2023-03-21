@@ -15,8 +15,8 @@ from . import _are_deterministic_algorithms_enabled, _io, _logger, _use_determin
 from ._execution_agent import TrainingAgent
 from ._fallback import ORTModuleFallbackException, _FallbackManager, _FallbackPolicy
 from ._graph_execution_manager import GraphExecutionManager, _RunStateInfo, _SkipCheck
-from .debug_options import DebugOptions
 from ._graph_transformer_registry import GraphTransformerRegistry
+from .debug_options import DebugOptions
 
 
 class TrainingManager(GraphExecutionManager):

@@ -20,7 +20,7 @@ from ._ir import (
     ReduceNode,
 )
 from ._lowering import GraphLowering
-from ._node_sets import ReduceNodeSetInternal
+from ._op_config import is_reduction_node
 
 
 def _get_type(t):
@@ -182,7 +182,7 @@ class TritonCodeGen(NodeVisitor):
             if node.step == node.end:
                 # TODO FIXME HACK
                 for idx, g in enumerate(node.body):
-                    if g.op_type in ReduceNodeSetInternal():
+                    if is_reduction_node(g.op_type):
                         g.is_final = True
 
                 src += need_indent + f"roffset = rbase\n"
@@ -263,7 +263,6 @@ class TritonCodeGen(NodeVisitor):
         import torch
 
         final_shape = list(node.output[0].shape)
-        torch_dtype = torch.from_numpy(np.zeros(1, dtype=node.output[0].dtype)).dtype
         for out in node.output:
             assert len(out.shape) == len(final_shape), "output shape dim not match"
             for idx, v in enumerate(final_shape):
@@ -273,6 +272,7 @@ class TritonCodeGen(NodeVisitor):
         # allocate output tensor
         alloc_output_tensor_code = ""
         for idx, out in enumerate(node.output):
+            torch_dtype = torch.from_numpy(np.zeros(1, dtype=node.output[idx].dtype)).dtype
             alloc_output_tensor_code += (
                 f"    outputs.append(torch.zeros({tuple(out.shape)}, dtype={torch_dtype}, device=inputs[0].device))\n"
             )
@@ -358,7 +358,7 @@ from torch.utils.dlpack import to_dlpack
                 src += f"{named_var_o} = {vectorized_prefix}sqrt({named_vars_i[0]})\n"
             elif node.op_type == "Rsqrt":
                 if node.use_lib_device:
-                    src += f"{named_var_o} = {vectorized_prefix}rsqrt({named_vars_i[0]})\n"
+                    src += f"{named_var_o} = {vectorized_prefix}libdevice.rsqrt({named_vars_i[0]})\n"
                 else:
                     src += f"{named_var_o} = 1.f/{vectorized_prefix}sqrt({named_vars_i[0]})\n"
             elif node.op_type == "Cast":

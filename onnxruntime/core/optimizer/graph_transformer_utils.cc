@@ -77,6 +77,7 @@
 #include "orttraining/core/optimizer/memory_optimizer.h"
 #ifdef USE_CUDA
 #include "orttraining/core/optimizer/triton_fusion.h"
+#include "orttraining/training_ops/cpu/triton/triton_op_executor.h"
 #endif  // USE_CUDA
 #endif
 
@@ -319,8 +320,11 @@ InlinedVector<std::unique_ptr<GraphTransformer>> GenerateTransformers(
 
 #ifdef ENABLE_TRAINING
 #ifdef USE_CUDA
-      transformers.emplace_back(
-          std::make_unique<TritonFusion>(InlinedHashSet<std::string_view>{onnxruntime::kCudaExecutionProvider}));
+      if (onnxruntime::contrib::TritonOpExecutor::Instance().IsInitialized()) {
+        transformers.emplace_back(
+            std::make_unique<TritonFusion>(onnxruntime::contrib::TritonOpExecutor::Instance().GetConfigJson(),
+                                           InlinedHashSet<std::string_view>{onnxruntime::kCudaExecutionProvider}));
+      }
 #endif  // USE_CUDA
 
       // Put memory optimization transformer at last (which is done after most of fusions are done) by intention.

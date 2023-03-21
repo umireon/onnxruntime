@@ -19,7 +19,7 @@ from ._ir import (
     ModuleNode,
     ReduceNode,
 )
-from ._node_sets import ReduceNodeSetInternal
+from ._op_config import is_reduction_node
 from ._scheduling import GPUSchedule
 
 
@@ -65,7 +65,7 @@ def insert_load_and_store(block: ExecutionBlock, global_buffer: GraphIOBuffer, c
         for inp in g.input:
             producer_op = c_graph.egraph.produced_by[inp][0] if inp in c_graph.egraph.produced_by else None
 
-            if (inp in block.load or inp in input_name_map) and producer_op not in ReduceNodeSetInternal():
+            if (inp in block.load or inp in input_name_map) and not is_reduction_node(producer_op):
                 load_buf = block.load[inp] if inp in block.load else input_name_map[inp]
                 # we just skip unused load for constant scalar
                 if (load_buf.data is not None and load_buf.data.size == 1) or load_buf.name in load_cache:

@@ -12,7 +12,7 @@ import onnx
 from ._common import TENSOR_TYPE_TO_NP_TYPE, GraphIOBuffer, OnnxInGraph, parse_onnx_to_numpyarray
 from ._de_compose import DecomposeDispatch
 from ._ir import ComputeBuffer, ComputeNode, ExecutionBlock, ReduceNode
-from ._node_sets import DecomposeNodeSetInternal, ElementWiseNodeSet, ReduceNodeSet, ReduceNodeSetInternal
+from ._op_config import is_elementwise_node, is_reduction_node
 from ._utils import convert_onnx_value_to_computebuffer
 
 
@@ -86,12 +86,13 @@ class ConnectionGraph(object):
         return self.node_2_gnode[name]
 
     def try_decompose(self, node, shape_info_map) -> (list):
-        if node in DecomposeNodeSetInternal():
+        if node in self.decompose_dispatcher:
             return self.decompose_dispatcher(node, shape_info_map=shape_info_map)
 
         return []
 
     def decompose(self, e_graph: OnnxInGraph, recursive_depth=1):
+        e_graph.gen_name2module_map()
         replace_nodes = {}
         graph = e_graph.graph
         modified = False
@@ -265,7 +266,7 @@ def lower_Node_to_IRNode(block: ExecutionBlock, graph_io: GraphIOBuffer, buffer_
         for ob in out_b:
             ob.predecessor = ir_node
         node = g.current_node
-        if node in ReduceNodeSetInternal():
+        if is_reduction_node(node):
             block.has_reduce = True
             for o in node.output:
                 o_buf = out_b[out_b.index(o)]
@@ -285,7 +286,7 @@ class InterGroupStrategy(object):
         self.count = 0
 
     def can_fusion(self, node1, node2):
-        if node1.op_type in ElementWiseNodeSet():
+        if is_elementwise_node(node1.op_type):
             return True
         return False
 
@@ -335,18 +336,17 @@ class ExecutionPrepare(object):
         # if not queue:
         #    raise Exception("no node with in_degree 0")
 
-        reduce_nodes = ReduceNodeSet(self.edge_graph.egraph.produced_by)
         sorted_nodes = []
 
         def has_non_reduce_child(queue):
             for n in queue:
-                if n.current_node not in reduce_nodes:
+                if not is_reduction_node(n.current_node):
                     return True
             return False
 
         while queue:
             node: Node = queue.popleft()
-            if node.current_node in reduce_nodes and has_non_reduce_child(queue):
+            if is_reduction_node(node.current_node) and has_non_reduce_child(queue):
                 queue.append(node)
                 continue
             # print(node.current_node.name)

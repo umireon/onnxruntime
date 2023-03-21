@@ -9,15 +9,35 @@
 
 namespace onnxruntime {
 
+struct TritonFusionConfig {
+  struct OpInfo {
+    std::string domain;
+    std::vector<ONNX_NAMESPACE::OperatorSetVersion> versions;
+    bool is_no_op;
+    std::unordered_map<std::string, std::string> conditions;
+  };
+
+  TritonFusionConfig(std::string_view config_json = "{}");
+
+  bool IsSupported(const Node& node) const;
+  bool IsNoOp(const Node& node) const;
+
+  std::unordered_map<std::string, OpInfo> ops;
+  std::string initializer = "none";
+};
+
 class TritonFusion : public GraphTransformer {
  public:
-  TritonFusion(const InlinedHashSet<std::string_view>& compatible_execution_providers = {}) noexcept
-      : GraphTransformer("TritonFusion", compatible_execution_providers) {}
+  TritonFusion(std::string_view config_json = "{}",
+               const InlinedHashSet<std::string_view>& compatible_execution_providers = {}) noexcept
+      : GraphTransformer("TritonFusion", compatible_execution_providers), config(config_json) {}
 
   Status ApplyImpl(Graph& graph, bool& modified, int graph_level, const logging::Logger& logger) const override;
 
  private:
   bool IsSupportedNode(const Graph& graph, const Node& node) const;
+
+  TritonFusionConfig config;
 };
 
 }  // namespace onnxruntime
