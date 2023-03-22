@@ -310,7 +310,7 @@ from torch.utils.dlpack import to_dlpack
         return code
 
     def ComputeNode(self, node: ComputeNode, var_context: CodeGenContext, indent: int):
-        def gen_cpp_code_for_op(var_context: CodeGenContext):
+        def gen_cpp_code_for_op(var_context: CodeGenContext, space_indent: str):
             var_map = var_context.var_map
             vec_var_map = var_context.vectorized_var_set
             ori_named_vars_i = [var_map[i.name] for i in node.input]
@@ -332,7 +332,9 @@ from torch.utils.dlpack import to_dlpack
             vectorized_prefix = "tl."
 
             assert len(named_vars_i) in [1, 2, 3]
-            assert len(named_vars_o) == 1
+            # I don't think we can benefit too much if we decompose dropout
+            # so currently, we just use the dropout op
+            assert len(named_vars_o) == 1 or node.op_type_ == "Dropout"
 
             named_var_o = named_vars_o[0]
             src = ""
@@ -370,6 +372,8 @@ from torch.utils.dlpack import to_dlpack
                     src += f"{named_var_o} = ({named_vars_i[0]}).to(tl.float32)\n"
                 elif to_dtype == np.float16:
                     src += f"{named_var_o} = ({named_vars_i[0]}).to(tl.float16)\n"
+                elif from_dtype == to_dtype:
+                    src += f"{named_var_o} = {named_vars_i[0]}\n"
                 else:
                     raise NotImplementedError(f"Cast to {to_dtype} is not supported")
             elif node.op_type == "Erf":
@@ -394,13 +398,36 @@ from torch.utils.dlpack import to_dlpack
                     src += f"{named_var_o} = {vectorized_prefix}libdevice.log({named_vars_i[0]})\n"
                 else:
                     src += f"{named_var_o} = {vectorized_prefix}log({named_vars_i[0]})\n"
+            elif node.op_type == "Dropout":
+                if len(named_vars_o) == 2:
+                    named_var_o_mask_out = named_vars_o[1]
+                else:
+                    named_var_o_mask_out = "mask_output"
+
+                # we would either decompose dropout or achieve mask here
+                non_mask_out = node.output[0]
+                if node.output[0].dtype.type == np.bool_:
+                    named_var_o, named_var_o_mask_out = named_var_o_mask_out, named_var_o
+                    non_mask_out = node.output[1]
+
+                annotated_out_var = Indexer().code_gen('roffset', non_mask_out)
+
+                src += "seed = 0\n"
+                src += space_indent + f"random = tl.rand(seed, {annotated_out_var})\n"
+                src += space_indent + f"{named_var_o_mask_out} = random < {named_vars_i[1]}\n"
+                src += (
+                    space_indent
+                    + f"{named_var_o} = tl.where({named_var_o_mask_out}, {named_vars_i[0]} / {named_vars_i[1]}, 0.0)\n"
+                )
+            elif node.op_type == "Identity":
+                src += f"{named_var_o} = {named_vars_i[0]}\n"
             else:
                 raise Exception(f"not supported {node.op_type}")
             return src
 
         space_indent = " " * indent
         src = space_indent + f"# {node.op_name} {node.op_type}\n"
-        src += space_indent + gen_cpp_code_for_op(var_context)
+        src += space_indent + gen_cpp_code_for_op(var_context, space_indent)
         return src
 
     def ReduceNode(self, node: ReduceNode, var_context: CodeGenContext, indent: int):
@@ -507,10 +534,7 @@ from torch.utils.dlpack import to_dlpack
         code += space_indent + f"roffset = {rbase} # + offset\n"
         # code += space_indent + f"{mask_name} = roffset <  tl.minimum(RBLOCK,{input_buf.shape[-1]})\n"
         mask_name = "triton_rmask"
-        if input_buf.dtype.type == np.bool_:
-            assert False, "bool type not supported"
-        else:
-            return code + (space_indent + f"tl.store(e_{annotated_var}+roffset, {named_var}, {mask_name})\n")
+        return code + (space_indent + f"tl.store(e_{annotated_var}+roffset, {named_var}, {mask_name})\n")
 
     def ExecutionBlock(self, node: ExecutionBlock, var_context: CodeGenContext, indent: int):
         assert not var_context

@@ -15,6 +15,8 @@ _ELEMENTWISE_OPS = {
     "Exp": {"domain": "", "versions": [6, 13], "is_no_op": False, "conditions": {}},
     "Where": {"domain": "", "versions": [9, 16], "is_no_op": False, "conditions": {}},
     "Cast": {"domain": "", "versions": [6, 9, 13], "is_no_op": False, "conditions": {}},
+    "Dropout": {"domain": "", "versions": [6, 9, 13], "is_no_op": False, "conditions": {}},
+    "Identity": {"domain": "", "versions": [6, 9, 13], "is_no_op": False, "conditions": {}},
     # "Tanh", "Erf", "Gelu", "FastGelu", "Relu", "Equal", "Not"
 }
 

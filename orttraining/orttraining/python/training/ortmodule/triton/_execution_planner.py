@@ -201,7 +201,7 @@ class ConnectionGraph(object):
                     else:
                         print(" ")
                 else:
-                    raise Exception("output not found")
+                    raise Exception(f"invalid graph: output {out} is not a graph output or consumed by other node")
         # for inp in egraph.graph_input_names:
         #    in_gnode:Node = self.get_or_create_gnode(egraph.node_name2module[inp])
         #    len(in_gnode.output_nodes) == 2

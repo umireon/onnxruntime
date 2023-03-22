@@ -15,30 +15,33 @@ from onnxruntime.tools.symbolic_shape_infer import SymbolicShapeInference
 
 from ._codecache import PyCodeCache
 from ._codegen import codegen
-from ._node_sets import get_supported_ops
+from ._op_config import get_supported_ops
 
 
 def _process_onnx_model(onnx_str: bytes, input_shapes: List[List[int]]) -> bytes:
     model = onnx.load_model_from_string(onnx_str)
     graph = model.graph
-    name_map = {}
-    node_idx = 0
-    arg_idx = 0
-    for node in graph.node:
-        node.name = "node_" + str(node_idx)
-        node_idx += 1
-        for idx, name in enumerate(node.input):
-            if name not in name_map:
-                name_map[name] = "arg_" + str(arg_idx)
-                arg_idx += 1
-            node.input[idx] = name_map[name]
-        for idx, name in enumerate(node.output):
-            if name not in name_map:
-                name_map[name] = "arg_" + str(arg_idx)
-                arg_idx += 1
-            node.output[idx] = name_map[name]
-    for node in itertools.chain(graph.input, graph.output, graph.initializer):
-        node.name = name_map[node.name]
+    #name_map = {}
+    #node_idx = 0
+    #arg_idx = 0
+
+    # TODO(vincent)
+    # It seems not work for biasDropout model, the whole graph is screwed up.
+    #for node in graph.node:
+    #    node.name = "node_" + str(node_idx)
+    #    node_idx += 1
+    #    for idx, name in enumerate(node.input):
+    #        if name not in name_map:
+    #            name_map[name] = "arg_" + str(arg_idx)
+    #            arg_idx += 1
+    #        node.input[idx] = name_map[name]
+    #    for idx, name in enumerate(node.output):
+    #        if name not in name_map:
+    #            name_map[name] = "arg_" + str(arg_idx)
+    #            arg_idx += 1
+    #        node.output[idx] = name_map[name]
+    #for node in itertools.chain(graph.input, graph.output, graph.initializer):
+    #    node.name = name_map[node.name]
 
     assert len(graph.input) == len(input_shapes)
     new_inputs = []

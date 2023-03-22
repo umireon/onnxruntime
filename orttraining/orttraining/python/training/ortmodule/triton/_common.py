@@ -116,7 +116,7 @@ class NodeVisitor(object):
 class CodeGenContext(object):
     def __init__(self, var_map: dict):
         self.var_map = var_map
-        self.vectorized_var_set: Dict = set()
+        self.vectorized_var_set = set()
 
 
 class SpecialVar(object):
