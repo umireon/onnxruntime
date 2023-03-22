@@ -70,13 +70,13 @@ class Schedule(object):
                 # a var is not in bb1.input and not bb1.output
                 new_input.add(var)
             else:
-                bb2.forward_var_set[-1][var.name] = var
+                bb2.forward_var_map_list[-1][var.name] = var
 
         for k, v in tmp_var_but_across_loop.items():
-            if k not in bb1.forward_var_set[-1]:
-                bb1.forward_var_set[-1][k] = v
+            if k not in bb1.forward_var_map_list[-1]:
+                bb1.forward_var_map_list[-1][k] = v
 
-        bb1.forward_var_set.extend(bb2.forward_var_set)
+        bb1.forward_var_map_list.extend(bb2.forward_var_map_list)
         bb1.output = list(new_output)
         bb1.input = list(new_input)
 
@@ -249,7 +249,6 @@ class GPUSchedule(Schedule):
         bb1: ExecutionBlock = blocks[0]
         if not isinstance(bb1.body, Loop):
             return blocks
-        sympy_factor = sympy_symbol(tile_size)
 
         def do_tile_loop(loop: Loop):
             if loop.depth > 1:
@@ -309,7 +308,7 @@ class GPUSchedule(Schedule):
         graph_inputs: List[ComputeBuffer],
         graph_outputs: List[ComputeBuffer],
         load_map: Dict,
-        forward_var_set: Dict[str, ComputeBuffer],
+        forward_var_map: Dict[str, ComputeBuffer],
     ):
         # order is not important
         inputs_set = set()
@@ -319,13 +318,13 @@ class GPUSchedule(Schedule):
                 inputs_set.add(reused_loadnode)
                 continue
             if inp.predecessor is None or inp.shape[-1] == 1:
-                forward_var_set[inp.name] = inp
+                forward_var_map[inp.name] = inp
                 continue
 
             inputs_set.add(inp.predecessor)
             inputs_set.update(
                 GPUSchedule.collect_predecessors_for_recompute(
-                    inp.predecessor.input, graph_inputs, graph_outputs, load_map, forward_var_set
+                    inp.predecessor.input, graph_inputs, graph_outputs, load_map, forward_var_map
                 )
             )
 
@@ -382,7 +381,7 @@ class GPUSchedule(Schedule):
                 if not input_need_recompute:
                     continue
                 lidx = len(list_loop) - 1 - lidx - 1
-                prev_forward_map = list_loop[lidx].forward_var_set if lidx >= 0 else {}
+                prev_forward_map = list_loop[lidx].forward_var_map if lidx >= 0 else {}
                 nodes_for_recompute = self.collect_predecessors_for_recompute(
                     input_need_recompute, bb1.input, bb1.output, load_map, prev_forward_map
                 )

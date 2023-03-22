@@ -128,6 +128,7 @@ class SpecialVar(object):
         self.parallel_loop_end = "p_loop_end"
         self.dynamic_shape_args = "dynamic_shape_args"
         self.rbase = "rbase"
+        self.rblock = "RBLOCK"
 
 
 def add_all_intermidiate_values(model):

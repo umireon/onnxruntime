@@ -8,7 +8,7 @@ from functools import wraps
 
 from onnxruntime.capi import _pybind_state as _C
 
-from .manual import *
+#from .manual import *
 from .triton_op_executor import get_config, execute_triton_op
 
 

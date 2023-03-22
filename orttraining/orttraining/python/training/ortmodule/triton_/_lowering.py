@@ -177,11 +177,7 @@ class GraphLowering(NodeVisitor):
         node.body[0].analyze_io_connections()
 
     def ModuleNode(self, node: ModuleNode, context: HardwareContext):
-        allow_vectorize = True
-
-        def lower_to_functionNode(
-            blocks: List[ExecutionBlock], global_buffer: GraphIOBuffer, func_name: str, allow_vectorize: bool
-        ):
+        def lower_to_functionNode(blocks: List[ExecutionBlock], global_buffer: GraphIOBuffer, func_name: str):
             for block in blocks:
                 block.lower(self, context)
             schedule = GPUSchedule()
@@ -206,9 +202,9 @@ class GraphLowering(NodeVisitor):
             plan = ExecutionPrepare(model)
             plan.prepare()
             node_group = plan.create_execution_plan(analyze_io)
-            function: FunctionNode = lower_to_functionNode(node_group, plan.external_buffer, func_name, allow_vectorize)
+            function: FunctionNode = lower_to_functionNode(node_group, plan.external_buffer, func_name)
             node.body.append(function)
-        node.has_vectorization = allow_vectorize
+        node.has_vectorization = True
 
     def ExecutionBlock(self, node: ExecutionBlock, context: HardwareContext):
         # add Loop()

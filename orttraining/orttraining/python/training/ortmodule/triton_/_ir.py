@@ -126,7 +126,7 @@ class Loop(IRNode):
         self.parallel: bool = False
         self.parallel_nest_loop: Union[Loop, List[Loop]] = None
         self.attributes = LoopAttr.ScalarLoop
-        self.forward_var_set: Dict[ComputeBuffer] = OrderedDict()
+        self.forward_var_map: Dict[ComputeBuffer] = OrderedDict()
         self.var_need_post_process: OrderedDict = {}
 
     def visit(self, var):
@@ -175,7 +175,12 @@ class ExecutionBlock(IRNode):
         self.dtype = list(group[0].output_with_shapes.values())[0][0]
         self.shape = self.extract_shape(group)
         self.var_map = OrderedDict()
-        self.forward_var_set = [OrderedDict()]
+        # A block usually means a fused loop. In triton, it's impossible to have multiple loops in a block.
+        # so a function has only one block
+        # But A block could have multiple inner loop, some vars may be used across multiple inner loop
+        # so we need to maintain a list of vars for forward declaration and initialization and even guide
+        # how to do recompute.
+        self.forward_var_map_list = [OrderedDict()]
         self.body = None
         self.hw_context = None
         self.connections: Dict[str, IoConnection] = OrderedDict()
@@ -236,7 +241,8 @@ class ExecutionBlock(IRNode):
             loop.attributes = LoopAttr.Vectorization
 
         loop.depth = 0
-        loop.forward_var_set = self.forward_var_set[0]
+        # currently, we have only one map
+        loop.forward_var_map = self.forward_var_map_list[0]
 
         return loop
 
@@ -277,8 +283,8 @@ class ExecutionBlock(IRNode):
             exist_var.add(name)
             return name
 
-        for forward_var_set in self.forward_var_set:
-            for inp in forward_var_set:
+        for forward_var_map in self.forward_var_map_list:
+            for inp in forward_var_map:
                 self.var_map[inp] = legal_name(inp)
         for inp in self.input:
             self.var_map[inp.name] = legal_name(inp.name)

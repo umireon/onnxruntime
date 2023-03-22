@@ -25,6 +25,9 @@ def attr_parse(attr, ind=None):
         raise NotImplementedError("Not implemented for attr type: {}".format(attr.type))
 
 
+'''
+decompose a complicated op into a series of simple ops
+'''
 class DecomposeDispatch(object):
     def __init__(self):
         super().__init__()
