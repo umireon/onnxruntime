@@ -10,6 +10,7 @@ from collections import OrderedDict
 
 import numpy as np
 import onnx
+import onnx.helper
 
 from onnxruntime.tools import symbolic_shape_infer
 
@@ -129,6 +130,18 @@ class SpecialVar(object):
         self.dynamic_shape_args = "dynamic_shape_args"
         self.rbase = "rbase"
         self.rblock = "RBLOCK"
+
+
+def parse_onnx_attributes(attributes) -> dict:
+    """
+    Parse ONNX attributes into a dictionary
+    """
+    attributes_map = {}
+    if not attributes:
+        return attributes_map
+    for attribute in attributes:
+        attributes_map[attribute.name] = onnx.helper.get_attribute_value(attribute)
+    return attributes_map
 
 
 def add_all_intermidiate_values(model):

@@ -302,6 +302,9 @@ class TritonCodeGen(NodeVisitor):
         alloc_output_tensor_code = ""
         for idx, out in enumerate(node.output):
             torch_dtype = torch.from_numpy(np.zeros(1, dtype=node.output[idx].dtype)).dtype
+            # to_dlpack() is not supported for bool type, so we need to convert it to uint8
+            if torch_dtype == torch.bool:
+                torch_dtype = torch.uint8
             alloc_output_tensor_code += (
                 f"    outputs.append(torch.zeros({tuple(out.shape)}, dtype={torch_dtype}, device=inputs[0].device))\n"
             )
@@ -383,9 +386,7 @@ from torch.utils.dlpack import to_dlpack
                 elif raw_named_vars_1 == 3:
                     src_code += f"{named_var_o} = {named_vars_i[0]} * {named_vars_i[0]}* {named_vars_i[0]}\n"
                 else:
-                    src_code += (
-                        f"{named_var_o} = tl.libdevice.pow({named_vars_i[0]}, {named_vars_i[1]})\n"
-                    )
+                    src_code += f"{named_var_o} = tl.libdevice.pow({named_vars_i[0]}, {named_vars_i[1]})\n"
             elif node.op_type == "Sqrt":
                 src_code += f"{named_var_o} = tl.sqrt({named_vars_i[0]})\n"
             elif node.op_type == "Rsqrt":
@@ -409,17 +410,13 @@ from torch.utils.dlpack import to_dlpack
             elif node.op_type == "Erf":
                 src_code += f"{named_var_o} = tl.libdevice.erf({named_vars_i[0]})\n"
             elif node.op_type == "Gelu":
-                src_code += (
-                    f"{named_var_o} = (tl.libdevice.erf({named_vars_i[0]}/1.41421356237)+1.0)*0.5\n"
-                )
+                src_code += f"{named_var_o} = (tl.libdevice.erf({named_vars_i[0]}/1.41421356237)+1.0)*0.5\n"
             elif node.op_type == "Exp":
                 src_code += f"{named_var_o} = tl.exp({named_vars_i[0]})\n"
             elif node.op_type == "Tanh":
                 src_code += f"{named_var_o} = tl.libdevice.tanh({named_vars_i[0]})\n"
             elif node.op_type == "Where":
-                src_code += (
-                    f"{named_var_o} = tl.where({named_vars_i[0]},{named_vars_i[1]},{named_vars_i[2]})\n"
-                )
+                src_code += f"{named_var_o} = tl.where({named_vars_i[0]},{named_vars_i[1]},{named_vars_i[2]})\n"
             elif node.op_type == "Sigmoid":
                 if node.use_lib_device:
                     src_code += f"{named_var_o} = tl.libdevice.sigmoid({named_vars_i[0]})\n"
@@ -444,7 +441,15 @@ from torch.utils.dlpack import to_dlpack
 
                 annotated_out_var = Indexer().code_gen("roffset", non_mask_out)
 
-                src_code += "seed = 0\n"
+                if "seed" in node.attributes:
+                    seed = node.attributes["seed"]
+                else:
+                    import time
+
+                    seed = int(round(1000 * time.time()))
+                # workaround for triton, if we replace seed as constant value, it would be seen as constexpr
+                # has no attr, which leads to compile err
+                src_code += f"seed = {seed}\n"
                 src_code += space_indent + f"random = tl.rand(seed, {annotated_out_var})\n"
                 src_code += space_indent + f"{named_var_o_mask_out} = random < {named_vars_i[1]}\n"
                 src_code += (

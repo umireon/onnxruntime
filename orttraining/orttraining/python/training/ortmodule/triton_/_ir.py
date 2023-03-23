@@ -15,7 +15,14 @@ import onnx.numpy_helper
 import sympy
 from sympy.codegen.rewriting import create_expand_pow_optimization
 
-from ._common import TENSOR_TYPE_TO_NP_TYPE, CodeGenContext, HardwareContext, NodeVisitor, SpecialVar
+from ._common import (
+    TENSOR_TYPE_TO_NP_TYPE,
+    CodeGenContext,
+    HardwareContext,
+    NodeVisitor,
+    SpecialVar,
+    parse_onnx_attributes,
+)
 from ._op_config import is_elementwise_node, is_reduction_node
 from ._sympy_utils import FloorDiv, sympy_dot, sympy_symbol
 
@@ -340,9 +347,10 @@ class ModuleNode(IRNode):
 
 
 class ComputeNode(IRNode):
-    def __init__(self, op_type, inputs, outputs, op_name: str = ""):
+    def __init__(self, op_type, inputs, outputs, op_name: str = "", attributes: list = None):
         super().__init__()
         self.op_type_ = op_type
+        self.attributes = parse_onnx_attributes(attributes)
         self.input = inputs
         self.output = outputs
         self.op_name = op_name

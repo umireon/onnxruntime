@@ -260,7 +260,7 @@ def lower_Node_to_IRNode(block: ExecutionBlock, graph_io: GraphIOBuffer, buffer_
     new_group = []
     for g in group:
         in_b, out_b = translate_in_out_to_ComputeBuffer(g, buffer_cache)
-        ir_node = ComputeNode(g.op_type, in_b, out_b, g.name)
+        ir_node = ComputeNode(g.op_type, in_b, out_b, g.name, g.current_node.attribute)
         for ib in in_b:
             ib.successor.append(ir_node)
         for ob in out_b:
