@@ -412,6 +412,7 @@ namespace OperatorHelper
         static const int sc_sinceVer_EmbedLayerNormalization = 1;
         static const int sc_sinceVer_GroupNorm = 1;
         static const int sc_sinceVer_NhwcConv = 1;
+        static const int sc_sinceVer_BiasSplitGelu = 1;
     } // namespace MsftOperatorSet1
 
 } // namespace OperatorHelper
