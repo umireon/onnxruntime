@@ -212,7 +212,11 @@ DML_OP_EXTERN_CREATION_FUNCTION(LayerNormalization);
 DML_OP_EXTERN_CREATION_FUNCTION(LayerNormalization17);
 DML_OP_EXTERN_CREATION_FUNCTION(SkipLayerNormalization);
 DML_OP_EXTERN_CREATION_FUNCTION(EmbedLayerNormalization);
+<<<<<<< HEAD
 DML_OP_EXTERN_CREATION_FUNCTION(BiasSplitGelu);
+=======
+DML_OP_EXTERN_CREATION_FUNCTION(BiasAdd);
+>>>>>>> be29be7de8f57031ce2b51630a5401fbc4f09099
 DML_OP_EXTERN_CREATION_FUNCTION(LRN);
 DML_OP_EXTERN_CREATION_FUNCTION(MeanVarianceNormalization);
 DML_OP_EXTERN_CREATION_FUNCTION(GroupNorm);
@@ -889,6 +893,7 @@ constexpr static OperatorRegistrationInformation operatorRegistrationInformation
     {REG_INFO_MS(   1,  EmbedLayerNormalization,            typeNameListDefault,            supportedTypeListFloat16to32,           DmlGraphSupport::Supported)},
     {REG_INFO_MS(   1,  GroupNorm,                          typeNameListGroupNorm,          supportedTypeListGroupNorm,             DmlGraphSupport::Supported)},
     {REG_INFO_MS(   1,  BiasSplitGelu,                      typeNameListDefault,            supportedTypeListFloat16to32,           DmlGraphSupport::Supported)},
+    {REG_INFO_MS(   1,  BiasAdd,                            typeNameListDefault,            supportedTypeListFloat16to32,           DmlGraphSupport::Supported)},
 };
 
 template<typename T>
