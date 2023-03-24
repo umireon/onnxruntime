@@ -37,22 +37,23 @@ static void RunMultiHeadAttentionTest(
     bool use_float16 = false,
     bool disable_cpu = true,  // not supported in cpu right now.
     bool disable_cuda = false,
-    bool disable_rocm = true)  // not supported in rocm right now.
-{
+    bool disable_rocm = true,  // not supported in rocm right now.
+    bool disable_dml = false) {
   kv_sequence_length = (kv_sequence_length == 0 ? sequence_length : kv_sequence_length);
 
   int min_cuda_architecture = use_float16 ? 750 : 0;
   bool enable_cuda = HasCudaEnvironment(min_cuda_architecture) && !disable_cuda;
   bool enable_rocm = (nullptr != DefaultRocmExecutionProvider().get()) && !disable_rocm;
   bool enable_cpu = (nullptr != DefaultCpuExecutionProvider().get()) && !use_float16 && !disable_cpu;
+  bool enable_dml = !disable_dml;
 
-  if (enable_cpu || enable_cuda || enable_rocm) {
+  if (enable_cpu || enable_cuda || enable_rocm || enable_dml) {
     OpTester tester("MultiHeadAttention", 1, onnxruntime::kMSDomain);
     tester.AddAttribute<int64_t>("num_heads", static_cast<int64_t>(num_heads));
     tester.AddAttribute<float>("mask_filter_value", static_cast<float>(-10000.0f));
 
     std::vector<int64_t> query_dims = {batch_size, sequence_length, hidden_size};
-    std::vector<int64_t> key_dims =  {batch_size, is_static_kv ? kv_sequence_length : sequence_length, hidden_size};
+    std::vector<int64_t> key_dims = {batch_size, is_static_kv ? kv_sequence_length : sequence_length, hidden_size};
     std::vector<int64_t> value_dims = {batch_size, is_static_kv ? kv_sequence_length : sequence_length, v_hidden_size};
     std::vector<int64_t> bias_dims = {hidden_size + hidden_size + v_hidden_size};
     // TODO(wy): Introduce past sequence length to avoid using kv_sequence_length.
@@ -62,7 +63,7 @@ static void RunMultiHeadAttentionTest(
     std::vector<int64_t> past_value_dims = past_key_dims;
     std::vector<int64_t> output_dims = {batch_size, sequence_length, v_hidden_size};
     std::vector<int64_t> present_key_dims =
-                         {batch_size, num_heads, is_static_kv ? kv_sequence_length : sequence_length + kv_sequence_length, hidden_size / num_heads};
+        {batch_size, num_heads, is_static_kv ? kv_sequence_length : sequence_length + kv_sequence_length, hidden_size / num_heads};
     std::vector<int64_t> present_value_dims = present_key_dims;
 
     std::vector<float> query = (qkv_data.size() > 0 ? qkv_data : query_data);
@@ -236,6 +237,12 @@ static void RunMultiHeadAttentionTest(
       execution_providers.push_back(DefaultCpuExecutionProvider());
       tester.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
     }
+
+    if (enable_dml) {
+      std::vector<std::unique_ptr<IExecutionProvider>> execution_providers;
+      execution_providers.push_back(DefaultDmlExecutionProvider());
+      tester.Run(OpTester::ExpectResult::kExpectSuccess, "", {}, nullptr, &execution_providers);
+    }
   }
 }
 
@@ -265,7 +272,8 @@ static void RunMultiHeadAttentionKernel(
     bool is_static_kv = true,
     bool disable_cpu = true,  // not supported in cpu right now.
     bool disable_cuda = false,
-    bool disable_rocm = true) {
+    bool disable_rocm = true,
+    bool disable_dml = false) {
   if (kernel_type == AttentionKernelType::AttentionKernel_Default) {
     ScopedEnvironmentVariables scoped_env_vars{
         EnvVarMap{
@@ -277,7 +285,7 @@ static void RunMultiHeadAttentionKernel(
         query_data, key_data, value_data, kv_data, qkv_data, bias_data, rel_pos_bias_data,
         past_key_data, past_value_data, present_key_data, present_value_data, key_padding_mask_data,
         mask_type, output_data, num_heads, batch_size, sequence_length, kv_sequence_length,
-        hidden_size, v_hidden_size, is_static_kv, use_float16, disable_cpu, disable_cuda, disable_rocm);
+        hidden_size, v_hidden_size, is_static_kv, use_float16, disable_cpu, disable_cuda, disable_rocm, disable_dml);
     return;
   }
 
@@ -292,7 +300,7 @@ static void RunMultiHeadAttentionKernel(
         query_data, key_data, value_data, kv_data, qkv_data, bias_data, rel_pos_bias_data,
         past_key_data, past_value_data, present_key_data, present_value_data, key_padding_mask_data,
         mask_type, output_data, num_heads, batch_size, sequence_length, kv_sequence_length,
-        hidden_size, v_hidden_size, is_static_kv, use_float16, disable_cpu, disable_cuda, disable_rocm);
+        hidden_size, v_hidden_size, is_static_kv, use_float16, disable_cpu, disable_cuda, disable_rocm, disable_dml);
     return;
   }
 
@@ -307,7 +315,7 @@ static void RunMultiHeadAttentionKernel(
         query_data, key_data, value_data, kv_data, qkv_data, bias_data, rel_pos_bias_data,
         past_key_data, past_value_data, present_key_data, present_value_data, key_padding_mask_data,
         mask_type, output_data, num_heads, batch_size, sequence_length, kv_sequence_length,
-        hidden_size, v_hidden_size, is_static_kv, use_float16, disable_cpu, disable_cuda, disable_rocm);
+        hidden_size, v_hidden_size, is_static_kv, use_float16, disable_cpu, disable_cuda, disable_rocm, disable_dml);
     return;
   }
 
@@ -323,7 +331,7 @@ static void RunMultiHeadAttentionKernel(
         query_data, key_data, value_data, kv_data, qkv_data, bias_data, rel_pos_bias_data,
         past_key_data, past_value_data, present_key_data, present_value_data, key_padding_mask_data,
         mask_type, output_data, num_heads, batch_size, sequence_length, kv_sequence_length,
-        hidden_size, v_hidden_size, is_static_kv, use_float16, disable_cpu, disable_cuda, disable_rocm);
+        hidden_size, v_hidden_size, is_static_kv, use_float16, disable_cpu, disable_cuda, disable_rocm, disable_dml);
     return;
   }
 #endif
@@ -339,7 +347,7 @@ static void RunMultiHeadAttentionKernel(
         query_data, key_data, value_data, kv_data, qkv_data, bias_data, rel_pos_bias_data,
         past_key_data, past_value_data, present_key_data, present_value_data, key_padding_mask_data,
         mask_type, output_data, num_heads, batch_size, sequence_length, kv_sequence_length,
-        hidden_size, v_hidden_size, is_static_kv, use_float16, disable_cpu, disable_cuda, disable_rocm);
+        hidden_size, v_hidden_size, is_static_kv, use_float16, disable_cpu, disable_cuda, disable_rocm, disable_dml);
   }
 }
 
@@ -425,7 +433,7 @@ static void RunMultiHeadAttentionTests(AttentionTestData& data) {
   }
 }
 
-#ifndef _MSC_VER
+#if !defined(_MSC_VER) || defined(USE_DML)
 // Test fused cross attention kernel
 // It requires head_size > 32 and head_size <= 64 for T4 GPU; hidden_size == v_hidden_size.
 TEST(MultiHeadAttentionTest, CrossAttention_Batch2_HeadSize40) {
