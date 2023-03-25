@@ -20,6 +20,7 @@ limitations under the License.
 #include <vector>
 #include <functional>
 #include <memory>
+#include <gsl/gsl>
 #include "core/common/common.h"
 #include "core/platform/env.h"
 
@@ -153,7 +154,7 @@ class ThreadPool {
   // operations like I/O the hint should be set to false.
   //
   // REQUIRES: degree_of_parallelism > 0
-  ThreadPool(Env* env,
+  ThreadPool(gsl::not_null<Env*> env,
              const ThreadOptions& thread_options,
              const NAME_CHAR_TYPE* name,
              int degree_of_parallelism,

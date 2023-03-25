@@ -674,7 +674,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
 
   static unsigned WorkerLoop(int id, Eigen::ThreadPoolInterface* param) {
     // unsafe downcast
-    ThreadPoolTempl* this_ptr = (ThreadPoolTempl*)param;
+    gsl::not_null<ThreadPoolTempl*> this_ptr = (ThreadPoolTempl*)param;
     this_ptr->WorkerLoop(id);
     return 0;
   }
@@ -789,7 +789,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
 
   void Schedule(std::function<void()> fn) override {
     PerThread* pt = GetPerThread();
-    int q_idx = Rand(&pt->rand) % num_threads_;
+    int q_idx = Rand(pt->rand) % num_threads_;
     WorkerData& td = worker_data_[q_idx];
     Queue& q = td.queue;
     fn = q.PushBack(std::move(fn));
@@ -833,7 +833,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
   }
 
   void StartParallelSection(ThreadPoolParallelSection& ps) override {
-    PerThread* pt = GetPerThread();
+    gsl::not_null<PerThread*> pt = GetPerThread();
     StartParallelSectionInternal(*pt, ps);
   }
 
@@ -919,7 +919,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
   }
 
   void EndParallelSection(ThreadPoolParallelSection& ps) override {
-    PerThread* pt = GetPerThread();
+    gsl::not_null<PerThread*> pt = GetPerThread();
     EndParallelSectionInternal(*pt, ps);
   }
 
@@ -1087,7 +1087,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
         ps.tasks.push_back({q_idx, w_idx});
         td.EnsureAwake();
         if (push_status == PushResult::ACCEPTED_BUSY) {
-          worker_data_[Rand(&pt.rand) % num_threads_].EnsureAwake();
+          worker_data_[Rand(pt.rand) % num_threads_].EnsureAwake();
         }
       }
     }
@@ -1190,7 +1190,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
         if (push_status == PushResult::ACCEPTED_IDLE || push_status == PushResult::ACCEPTED_BUSY) {
           dispatch_td.EnsureAwake();
           if (push_status == PushResult::ACCEPTED_BUSY) {
-            worker_data_[Rand(&pt.rand) % num_threads_].EnsureAwake();
+            worker_data_[Rand(pt.rand) % num_threads_].EnsureAwake();
           }
         } else {
           ps.dispatch_q_idx = -1;  // failed to enqueue dispatch_task
@@ -1214,7 +1214,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
                             std::ptrdiff_t block_size) override {
     ORT_ENFORCE(n <= num_threads_ + 1, "More work items than threads");
     profiler_.LogStartAndCoreAndBlock(block_size);
-    PerThread* pt = GetPerThread();
+    gsl::not_null<PerThread*> pt = GetPerThread();
     assert(pt->leading_par_section && "RunInParallel, but not in parallel section");
     assert((n > 1) && "Trivial parallel section; should be avoided by caller");
 
@@ -1272,7 +1272,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
   void RunInParallel(std::function<void(unsigned idx)> fn, unsigned n, std::ptrdiff_t block_size) override {
     ORT_ENFORCE(n <= num_threads_ + 1, "More work items than threads");
     profiler_.LogStartAndCoreAndBlock(block_size);
-    PerThread* pt = GetPerThread();
+    gsl::not_null<PerThread*> pt = GetPerThread();
     ThreadPoolParallelSection ps;
     StartParallelSectionInternal(*pt, ps);
     RunInParallelInternal(*pt, ps, n, true, fn);  // select dispatcher and do job distribution;
@@ -1304,7 +1304,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
   }
 
  private:
-  void ComputeCoprimes(int N, Eigen::MaxSizeVector<unsigned>* coprimes) {
+  void ComputeCoprimes(int N, gsl::not_null<Eigen::MaxSizeVector<unsigned>*> coprimes) {
     for (int i = 1; i <= N; i++) {
       unsigned a = i;
       unsigned b = N;
@@ -1621,7 +1621,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
     PerThread* pt = GetPerThread();
     unsigned size = num_threads_;
     unsigned num_attempts = (steal_kind == StealAttemptKind::TRY_ALL) ? size : 1;
-    unsigned r = Rand(&pt->rand);
+    unsigned r = Rand(pt->rand);
     unsigned inc = all_coprimes_[size - 1][r % all_coprimes_[size - 1].size()];
     unsigned victim = r % size;
 
@@ -1645,7 +1645,7 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
   int NonEmptyQueueIndex() {
     PerThread* pt = GetPerThread();
     const unsigned size = static_cast<unsigned>(worker_data_.size());
-    unsigned r = Rand(&pt->rand);
+    unsigned r = Rand(pt->rand);
     unsigned inc = all_coprimes_[size - 1][r % all_coprimes_[size - 1].size()];
     unsigned victim = r % size;
     for (unsigned i = 0; i < size; i++) {
@@ -1674,10 +1674,10 @@ class ThreadPoolTempl : public onnxruntime::concurrency::ExtendedThreadPoolInter
     return pt;
   }
 
-  static EIGEN_STRONG_INLINE unsigned Rand(uint64_t* state) {
-    uint64_t current = *state;
+  static EIGEN_STRONG_INLINE unsigned Rand(uint64_t& state) {
+    uint64_t current = state;
     // Update the internal state
-    *state = current * 6364136223846793005ULL + 0xda3e39cb94b95bdbULL;
+    state = current * 6364136223846793005ULL + 0xda3e39cb94b95bdbULL;
     // Generate the random output (using the PCG-XSH-RS scheme)
     return static_cast<unsigned>((current ^ (current >> 22)) >> (22 + (current >> 61)));
   }
