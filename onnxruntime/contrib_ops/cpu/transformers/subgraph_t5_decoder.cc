@@ -160,9 +160,15 @@ Status T5DecoderSubgraph::CreateInitialFeeds(
   } else {
     for (int i = 0; i < batch_beam_size; i++) {
       gsl::span<const int32_t> sequence = sequences.GetSequence(i);
-      const int32_t* sequence_data = sequence.data();
+      gsl::span<int32_t> seq_span(const_cast<int32_t*>(sequence.data()), sequence.size());
       for (int j = 0; j < cur_len; j++) {
-        input_ids_data[i * cur_len + j] = sequence_data[j];
+        gsl::span<int32_t> temp_input(&input_ids_data[i*cur_len + j] , 1);
+        gsl::span<int32_t> temp_sequence(&seq_span[j] , 1);
+        ORT_RETURN_IF_ERROR(device_copy_int32_func(
+            temp_input,
+            temp_sequence,
+            stream,
+            DeviceCopyDirection::hostToDevice));
       }
     }
   }
