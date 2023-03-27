@@ -36,7 +36,13 @@ jobs:
       --config Debug \
       --use_cache \
       --use_coreml
+    env:
+      CCACHE_DEBUG: 1
+      CCACHE_DEBUGDIR: $(System.DefaultWorkingDirectory)/ccache-debug-1
     displayName: CoreML EP, Build and Test on macOS
+
+  - publish: $(System.DefaultWorkingDirectory)/ccache-debug-1
+    artifact: cachelog
 
   - script: |
       ccache -s
