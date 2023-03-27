@@ -116,6 +116,9 @@ namespace AttrName
     static constexpr const char* MaskFilterValue = "mask_filter_value";
     static constexpr const char* DoRotary = "do_rotary";
 
+    static constexpr const char* GraphFusedActivation = "activation";
+    static constexpr const char* GraphFusedAxis = "activation_axis";
+
 } // namespace AttrName
 
 namespace AttrValue
