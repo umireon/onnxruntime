@@ -6,7 +6,6 @@ jobs:
     vmImage: 'macOS-12'
   variables:
     MACOSX_DEPLOYMENT_TARGET: '10.14'
-    CCACHE_DIR: $(Pipeline.Workspace)/ccache
     TODAY: $[format('{0:dd}{0:MM}{0:yyyy}', pipeline.startTime)]
   timeoutInMinutes: 120
   steps:
@@ -21,7 +20,7 @@ jobs:
   - task: Cache@2
     inputs:
       key:  ' "$(TODAY)" | coreml | "$(Build.SourceVersion)" '
-      path: $(CCACHE_DIR)
+      path: $(Pipeline.Workspace)/ccache
       restoreKeys: |
         "$(TODAY)" | coreml
     displayName: ccache task
@@ -38,6 +37,7 @@ jobs:
       --use_coreml
     env:
       CCACHE_COMPILERCHECK: content
+      CCACHE_DIR: $(Pipeline.Workspace)/ccache
     displayName: CoreML EP, Build and Test on macOS
 
   - script: |
