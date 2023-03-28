@@ -164,6 +164,15 @@ def parse_arguments(argv: Optional[List[str]] = None) -> argparse.Namespace:
     )
 
     output_group.add_argument(
+        "-b",
+        "--op_block_list",
+        required=False,
+        nargs="*",
+        default=['auto'],
+        help='Disable certain onnx operators when exporting model to onnx format. For gpt2 type of model fp16 precision, it would be set to ["Add", "LayerNormalization", "SkipLayerNormalization", "FastGelu"]. Other situation, it will be set to []'
+    )
+
+    output_group.add_argument(
         "-e",
         "--use_external_data_format",
         required=False,
@@ -467,12 +476,15 @@ def gpt2_to_onnx(args: argparse.Namespace):
     if args.use_external_data_format:
         arguments.append("--use_external_data_format")
 
+    if len(args.op_block_list):
+        arguments.extend(["--op_block_list"])
+        arguments.extend(args.op_block_list)
+
     if args.precision == Precision.FLOAT16:
         assert args.use_gpu, "fp16 or mixed precision model cannot run in CPU. Please add --use_gpu"
         # TODO(tianleiwu): Use auto mixed precision for fp16 conversion: arguments.append('--auto_mixed_precision')
         #       Need change cuda kernel to support a combination of fp32 logits and fp16 past state.
         #       Currently logits and past state shall be same data type.
-        arguments.extend(["--op_block_list", "Add", "LayerNormalization", "SkipLayerNormalization", "FastGelu"])
 
     if args.verbose:
         logger.info(f"arguments for convert_to_onnx:{arguments}")
@@ -1498,6 +1510,13 @@ def convert_generation_model(args: argparse.Namespace, generation_type: Generati
     past_present_share_buffer: bool = args.past_present_share_buffer
 
     logger.info(f"**** past_present_share_buffer={past_present_share_buffer}")
+    if len(args.op_block_list == 1) and args.op_block_list[0] == 'auto':
+        if is_gpt2 and args.precision == Precision.FLOAT16:
+            args.op_block_list = ["Add", "LayerNormalization", "SkipLayerNormalization", "FastGelu"]
+            logger.info(f"**** Setting op_block_list to {args.op_block_list}")
+            logger.info(f"**** use --op_block_list if you want to overwrite it.")
+        else:
+            args.op_block_list = []
 
     if is_greedysearch or is_sampling:
         if not is_gpt2:
