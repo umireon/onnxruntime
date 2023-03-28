@@ -6,7 +6,7 @@ jobs:
     vmImage: 'macOS-12'
   variables:
     MACOSX_DEPLOYMENT_TARGET: '10.14'
-    CCACHE_DIR: $(Pipeline.Workspace)/ccache
+    CCACHE_DIR: $(Pipeline.Workspace)/ccache1
     TODAY: $[format('{0:dd}{0:MM}{0:yyyy}', pipeline.startTime)]
   timeoutInMinutes: 120
   steps:
@@ -16,6 +16,7 @@ jobs:
   - script: |
       brew install ccache
       echo "##vso[task.prependpath]/usr/local/opt/ccache/libexec"
+      mkdir -p $(Pipeline.Workspace)/ccache1
     displayName: Install ccache and update PATH to use linked versions of gcc, cc, etc
 
   - task: Cache@2
