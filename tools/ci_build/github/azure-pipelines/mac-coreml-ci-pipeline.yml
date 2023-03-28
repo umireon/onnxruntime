@@ -42,6 +42,7 @@ jobs:
       CCACHE_DEBUG: 1
       CCACHE_DEBUGDIR: $(System.DefaultWorkingDirectory)/ccache-debug-1
       CCACHE_COMPILERTYPE: clang
+      CCACHE_COMPILERCHECK: content
       CCACHE_SLOPPINESS: time_macros, clang_index_store, file_stat_matches_ctime, include_file_ctime, include_file_mtime
     displayName: CoreML EP, Build and Test on macOS
 
