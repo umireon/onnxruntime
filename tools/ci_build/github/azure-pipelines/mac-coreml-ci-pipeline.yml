@@ -27,7 +27,6 @@ jobs:
     displayName: ccache task
 
   - script: |
-      makedir -p $(System.DefaultWorkingDirectory)/ccache-debug-1
       python3 tools/ci_build/build.py \
       --build_dir build \
       --skip_submodule_sync \
@@ -37,13 +36,8 @@ jobs:
       --config Debug \
       --use_cache \
       --use_coreml
-      ls $(System.DefaultWorkingDirectory)/ccache-debug-1
     env:
-      CCACHE_DEBUG: 1
-      CCACHE_DEBUGDIR: $(System.DefaultWorkingDirectory)/ccache-debug-1
-      CCACHE_COMPILERTYPE: clang
       CCACHE_COMPILERCHECK: content
-      CCACHE_SLOPPINESS: time_macros, clang_index_store, file_stat_matches_ctime, include_file_ctime, include_file_mtime
     displayName: CoreML EP, Build and Test on macOS
 
   - publish: $(System.DefaultWorkingDirectory)/ccache-debug-1
@@ -52,4 +46,6 @@ jobs:
   - script: |
       ccache -s
       ccache -z
+      ls -l $(CCACHE_DIR)
+      du -sh $(CCACHE_DIR)
     displayName: Show Cache stats and Clear stats.
