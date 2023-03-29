@@ -16,7 +16,6 @@ gtp2_perf_config = {
     "model_names": ["gpt2", "gpt2-large"],  # "distilgpt2",  "gpt2-medium" , "gpt2-xl"
     "exporting_args": {
         "-b",  # no block operator
-        "--use_decoder_masked_self_attention",
         "--past_present_share_buffer",
         "--use_external_data_format",
         "--use_gpu",
@@ -196,8 +195,10 @@ def perform_group_perf(args, extra_exporting_args, perf_test_config):
 if __name__ == "__main__":
     # Sample usage:
     # Test on greedy
-    #   python perf_group_generative.py --workspace ~/perf_gpt2/greedy --cache_dir ~/perf_gpt2/cache_models --num_beams 1
-    # TODO, add Test on beam / topp args here
+    #   python perf_group_generative.py --workspace ~/gpt2_greedy --cache_dir ~/cache_models --use_decoder_masked_self_attention --num_beams 1
+    # Test on topp:
+    #   python perf_group_generative.py --workspace ~/gpt2_topp --cache_dir ~/cache_models --num_beams 1 --top_p 0.6
+    # TODO, add Test on beam here
     #
     args, extra_exporting_args = parse_arguments(sys.argv[1:])
     perform_group_perf(args, extra_exporting_args, gtp2_perf_config)
