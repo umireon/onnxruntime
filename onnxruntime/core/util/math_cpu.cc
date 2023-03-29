@@ -83,8 +83,8 @@ void Gemm<float, ThreadPool>(CBLAS_TRANSPOSE TransA, CBLAS_TRANSPOSE TransB, ptr
 #ifdef MLAS_F16VEC_INTRINSICS_SUPPORTED
 template <>
 void Gemm<Eigen::half, ThreadPool>(CBLAS_TRANSPOSE TransA, CBLAS_TRANSPOSE TransB, ptrdiff_t M,
-                                   ptrdiff_t N, ptrdiff_t K, Eigen::half alpha, const Eigen::half* A, const Eigen::half* B, Eigen::half beta,
-                                   Eigen::half* C, ThreadPool* threadpool) {
+                                   ptrdiff_t N, ptrdiff_t K, MLFloat16 alpha, const MLFloat16* A, const MLFloat16* B, MLFloat16 beta,
+                                   MLFloat16* C, ThreadPool* threadpool) {
   int lda = static_cast<int>((TransA == CblasNoTrans) ? K : M);
   int ldb = static_cast<int>((TransB == CblasNoTrans) ? N : K);
   MlasGemm(TransA, TransB, M, N, K, alpha, A, lda, B, ldb, beta, C, N, threadpool);
