@@ -82,19 +82,19 @@ void Gemm<float, ThreadPool>(CBLAS_TRANSPOSE TransA, CBLAS_TRANSPOSE TransB, ptr
 //TODO: is this the correct macro to use?
 #ifdef MLAS_F16VEC_INTRINSICS_SUPPORTED
 template <>
-void Gemm<double, ThreadPool>(CBLAS_TRANSPOSE TransA, CBLAS_TRANSPOSE TransB, ptrdiff_t M,
-                              ptrdiff_t N, ptrdiff_t K, double alpha, const double* A, const double* B, double beta,
-                              double* C, ThreadPool* threadpool) {
+void Gemm<Eigen::half, ThreadPool>(CBLAS_TRANSPOSE TransA, CBLAS_TRANSPOSE TransB, ptrdiff_t M,
+                                   ptrdiff_t N, ptrdiff_t K, Eigen::half alpha, const Eigen::half* A, const Eigen::half* B, Eigen::half beta,
+                                   Eigen::half* C, ThreadPool* threadpool) {
   int lda = static_cast<int>((TransA == CblasNoTrans) ? K : M);
   int ldb = static_cast<int>((TransB == CblasNoTrans) ? N : K);
   MlasGemm(TransA, TransB, M, N, K, alpha, A, lda, B, ldb, beta, C, N, threadpool);
 }
 #else
 template <>
-void Gemm<double, ThreadPool>(CBLAS_TRANSPOSE TransA, CBLAS_TRANSPOSE TransB, ptrdiff_t M,
-                              ptrdiff_t N, ptrdiff_t K, double alpha, const double* A, const double* B, double beta,
-                              double* C, ThreadPool*) {
-  auto C_mat = EigenMatrixMap<double>(C, N, M);
+void Gemm<Eigen::half, ThreadPool>(CBLAS_TRANSPOSE TransA, CBLAS_TRANSPOSE TransB, ptrdiff_t M,
+                                   ptrdiff_t N, ptrdiff_t K, Eigen::half alpha, const Eigen::half* A, const Eigen::half* B, Eigen::half beta,
+                                   Eigen::half* C, ThreadPool*) {
+  auto C_mat = EigenMatrixMap<Eigen::half>(C, N, M);
   if (beta == 0) {
     C_mat.setZero();
   } else {
@@ -104,12 +104,12 @@ void Gemm<double, ThreadPool>(CBLAS_TRANSPOSE TransA, CBLAS_TRANSPOSE TransB, pt
     case CblasNoTrans: {
       switch (TransB) {
         case CblasNoTrans:
-          C_mat.noalias() += alpha * (ConstEigenMatrixMap<double>(B, N, K) *
-                                      ConstEigenMatrixMap<double>(A, K, M));
+          C_mat.noalias() += alpha * (ConstEigenMatrixMap<Eigen::half>(B, N, K) *
+                                      ConstEigenMatrixMap<Eigen::half>(A, K, M));
           return;
         case CblasTrans:
-          C_mat.noalias() += alpha * (ConstEigenMatrixMap<double>(B, K, N).transpose() *
-                                      ConstEigenMatrixMap<double>(A, K, M));
+          C_mat.noalias() += alpha * (ConstEigenMatrixMap<Eigen::half>(B, K, N).transpose() *
+                                      ConstEigenMatrixMap<Eigen::half>(A, K, M));
           return;
         default:
           ORT_THROW("CblasNoTrans Unexpected CBLAS_TRANSPOSE for TransB of ", TransB);
@@ -118,12 +118,12 @@ void Gemm<double, ThreadPool>(CBLAS_TRANSPOSE TransA, CBLAS_TRANSPOSE TransB, pt
     case CblasTrans: {
       switch (TransB) {
         case CblasNoTrans:
-          C_mat.noalias() += alpha * (ConstEigenMatrixMap<double>(B, N, K) *
-                                      ConstEigenMatrixMap<double>(A, M, K).transpose());
+          C_mat.noalias() += alpha * (ConstEigenMatrixMap<Eigen::half>(B, N, K) *
+                                      ConstEigenMatrixMap<Eigen::half>(A, M, K).transpose());
           return;
         case CblasTrans:
-          C_mat.noalias() += alpha * (ConstEigenMatrixMap<double>(B, K, N).transpose() *
-                                      ConstEigenMatrixMap<double>(A, M, K).transpose());
+          C_mat.noalias() += alpha * (ConstEigenMatrixMap<Eigen::half>(B, K, N).transpose() *
+                                      ConstEigenMatrixMap<Eigen::half>(A, M, K).transpose());
           return;
         default:
           ORT_THROW("CblasTrans Unexpected CBLAS_TRANSPOSE for TransB of ", TransB);
