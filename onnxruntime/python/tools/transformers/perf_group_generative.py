@@ -117,7 +117,7 @@ def perform_group_perf(args, extra_exporting_args, perf_test_config):
                 "-m",
                 f"{model_name}",
                 "--cache_dir",
-                f"args.cache_dir",
+                f"{args.cache_dir}",
                 "--output",
                 f"{output_model_path}",
                 "-p",
@@ -148,7 +148,7 @@ def perform_group_perf(args, extra_exporting_args, perf_test_config):
                 "-m",
                 f"{model_name}",
                 "--cache_dir",
-                f"args.cache_dir",
+                f"{args.cache_dir}",
                 "--onnx_model",
                 f"{output_model_path}",
             ]
