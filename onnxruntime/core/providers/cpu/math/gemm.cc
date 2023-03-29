@@ -72,6 +72,12 @@ ONNX_CPU_OPERATOR_TYPED_KERNEL(
     double,
     KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<double>()),
     Gemm<double>);
+ONNX_CPU_OPERATOR_TYPED_KERNEL(
+    Gemm,
+    13,
+    MLFloat16,
+    KernelDefBuilder().TypeConstraint("T", DataTypeImpl::GetTensorType<MLFloat16>()),
+    Gemm<MLFloat16>);
 
 bool GemmPackBFp32(AllocatorPtr& alloc,
                    const Tensor& tensor_b,
@@ -243,6 +249,62 @@ Status Gemm<T>::Compute(OpKernelContext* context) const {
 
   ComputeGemm(trans_A_, trans_B_, M, N, K, alpha_, A->Data<T>(), B->Data<T>(), beta_,
               c_data, c_shape, y_data, thread_pool);
+
+  ComputeActivation(y_data, SafeInt<size_t>(M) * N, thread_pool);
+
+  return Status::OK();
+}
+
+template <>
+Status Gemm<MLFloat16>::Compute(OpKernelContext* context) const {
+  concurrency::ThreadPool* thread_pool = context->GetOperatorThreadPool();
+
+  const auto* A = context->Input<Tensor>(0);
+  const auto* B = packed_b_ ? nullptr : context->Input<Tensor>(1);
+  const auto* C = context->Input<Tensor>(2);
+
+  // Bias could be missing. Treat as scalar 0 if that is the case.
+  GemmHelper helper(A->Shape(), trans_A_ != CblasNoTrans, B ? B->Shape() : b_shape_, trans_B_ != CblasNoTrans,
+                    C != nullptr ? C->Shape() : TensorShape({}));
+
+  if (!helper.State().IsOK())
+    return helper.State();
+
+  int64_t M = helper.M();
+  int64_t N = helper.N();
+  int64_t K = helper.K();
+
+  auto Y = context->Output(0, {M, N});
+
+  // if input is empty tensor, return as nothing need to be calculated and we've set the shape for the output
+  if (M == 0 || N == 0)
+    return Status::OK();
+
+  MLFloat16* y_data = Y->MutableData<MLFloat16>();
+
+  const MLFloat16* c_data = C != nullptr ? C->Data<MLFloat16>() : nullptr;
+  const TensorShape* c_shape = C != nullptr ? &C->Shape() : nullptr;
+
+  if (B) {
+    //ComputeGemm(trans_A_, trans_B_, M, N, K, alpha_, A->Data<float>(), B->Data<float>(), beta_,
+                //c_data, c_shape, y_data, thread_pool);
+    abort();
+  } else {
+    GemmBroadcastBias(M, N, beta_, c_data, c_shape, y_data);
+    MlasGemm(
+        trans_A_,
+        static_cast<size_t>(M),
+        static_cast<size_t>(N),
+        static_cast<size_t>(K),
+        alpha_,
+        A->Data<float>(),
+        static_cast<size_t>(trans_A_ != CblasNoTrans ? M : K),
+        packed_b_.get(),
+        c_data != nullptr ? beta_ : 0.0f,
+        y_data,
+        static_cast<size_t>(N),
+        thread_pool);
+  }
 
   ComputeActivation(y_data, SafeInt<size_t>(M) * N, thread_pool);
 
