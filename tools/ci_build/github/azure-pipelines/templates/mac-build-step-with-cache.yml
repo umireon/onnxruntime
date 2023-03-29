@@ -1,4 +1,4 @@
-# It's used for compilation with cache in Mac Host, not including iOS compilation.
+# It's used for compilation with cache in Mac Host.
 
 parameters:
 - name: TODAY
