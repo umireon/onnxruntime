@@ -158,8 +158,10 @@ def perform_group_perf(args, extra_exporting_args, perf_test_config):
 
     result_perf_file = os.path.join(args.workspace, "all_test_result.txt")
     with open(result_perf_file, "w") as f:
-        f.write(all_perf_result)
-        f.write(all_exporting_configs)
+        f.write("================all_perf_result=\n")
+        f.write(f"{all_perf_result}")
+        f.write("\n================all_exporting_configs=\n")
+        f.write(f"{all_exporting_configs}")
 
 
 if __name__ == "__main__":

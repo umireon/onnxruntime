@@ -168,8 +168,8 @@ def parse_arguments(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "--op_block_list",
         required=False,
         nargs="*",
-        default=['auto'],
-        help='Disable certain onnx operators when exporting model to onnx format. For gpt2 type of model fp16 precision, it would be set to ["Add", "LayerNormalization", "SkipLayerNormalization", "FastGelu"]. Other situation, it will be set to []'
+        default=["auto"],
+        help='Disable certain onnx operators when exporting model to onnx format. For gpt2 type of model fp16 precision, it would be set to ["Add", "LayerNormalization", "SkipLayerNormalization", "FastGelu"]. Other situation, it will be set to []',
     )
 
     output_group.add_argument(
@@ -1518,7 +1518,7 @@ def convert_generation_model(args: argparse.Namespace, generation_type: Generati
     past_present_share_buffer: bool = args.past_present_share_buffer
 
     logger.info(f"**** past_present_share_buffer={past_present_share_buffer}")
-    if len(args.op_block_list) == 1 and args.op_block_list[0] == 'auto':
+    if len(args.op_block_list) == 1 and args.op_block_list[0] == "auto":
         if is_gpt2 and args.precision == Precision.FLOAT16:
             args.op_block_list = ["Add", "LayerNormalization", "SkipLayerNormalization", "FastGelu"]
             logger.info(f"**** Setting op_block_list to {args.op_block_list}")
@@ -1560,7 +1560,9 @@ def convert_generation_model(args: argparse.Namespace, generation_type: Generati
             logger.info(f"skip convert_to_onnx since path existed: {args.decoder_onnx}")
         else:
             if not args.decoder_onnx:
-                onnx_filename = "gpt2_past_{}.onnx".format("fp16" if args.precision == Precision.FLOAT16 else "fp32")
+                onnx_filename = "{}_past_{}.onnx".format(
+                    args.model_name_or_path, "fp16" if args.precision == Precision.FLOAT16 else "fp32"
+                )
                 args.decoder_onnx = Path(Path(args.output).parent, onnx_filename).as_posix()
 
             logger.info(f"Convert GPT model {args.model_name_or_path} to onnx {args.decoder_onnx} ...")
@@ -2192,6 +2194,7 @@ def test_gpt_model(args: argparse.Namespace, sentences: Optional[List[str]] = No
         test_data_dir = Path(args.output).parent.as_posix()
         logger.debug("test_data_dir", test_data_dir)
         from bert_test_data import output_test_data
+
         logger.info(f"Saving test_data to {test_data_dir}/test_data_set_* ...")
 
         all_inputs = [inputs]

@@ -117,8 +117,7 @@ def perf_gpt_model(args: argparse.Namespace):
         latency.append(time.time() - start)
     output = get_latency_result(latency, batch_size)
 
-    print("ORT model perf result: ", output)
-
+    print("    ====> ORT perf result:", output)
     return output
 
 
@@ -263,7 +262,7 @@ def parse_perf_single_generative_model(argv):
             "vocab_size",
         ]
     }
-    print("ORT generative model config:", config_map)
+    print("    ====> Perfing with config:", config_map)
     perf_result = perf_gpt_model(args)
     return perf_result, config_map
 
