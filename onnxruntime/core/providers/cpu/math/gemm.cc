@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-
 #include "core/providers/cpu/math/gemm.h"
 #include "core/common/narrow.h"
 #include "core/common/safeint.h"
@@ -119,10 +118,10 @@ bool GemmPackBFp32(AllocatorPtr& alloc,
 
 template <typename T>
 void Gemm<T>::ComputeGemm(CBLAS_TRANSPOSE trans_a, CBLAS_TRANSPOSE trans_b,
-                          int64_t M, int64_t N, int64_t K,
-                          float alpha,
+                          ptrdiff_t M, ptrdiff_t N, ptrdiff_t K,
+                          T alpha,
                           const T* a_data, const T* b_data,
-                          float beta,
+                          T beta,
                           const T* c_data, const TensorShape* c_shape,
                           T* y_data,
                           concurrency::ThreadPool* thread_pool) {
@@ -133,20 +132,23 @@ void Gemm<T>::ComputeGemm(CBLAS_TRANSPOSE trans_a, CBLAS_TRANSPOSE trans_b,
   // Broadcast the bias as needed if bias is given
   GemmBroadcastBias(M, N, beta, c_data, c_shape, y_data);
 
+  //MLFloat16's constructor is explict, so here we need to use memset
+  if (c_data == nullptr)
+    memset(&beta, 0, sizeof(T));
   math::Gemm<T>(trans_a, trans_b,
-                narrow<ptrdiff_t>(M), narrow<ptrdiff_t>(N), narrow<ptrdiff_t>(K),
+                M, N, K,
                 alpha,
                 a_data,
                 b_data,
                 // ideally we need to set the output buffer contents to 0 if bias is missing,
                 // but passing 0 for beta is cheaper and it will ignore any junk in the output buffer
-                c_data != nullptr ? beta : 0,
+                beta,
                 y_data,
                 thread_pool);
 }
 
 template void Gemm<float>::ComputeGemm(CBLAS_TRANSPOSE trans_a, CBLAS_TRANSPOSE trans_b,
-                                       int64_t M, int64_t N, int64_t K,
+                                       ptrdiff_t M, ptrdiff_t N, ptrdiff_t K,
                                        float alpha,
                                        const float* a_data, const float* b_data,
                                        float beta,
@@ -233,9 +235,9 @@ Status Gemm<T>::Compute(OpKernelContext* context) const {
   if (!helper.State().IsOK())
     return helper.State();
 
-  int64_t M = helper.M();
-  int64_t N = helper.N();
-  int64_t K = helper.K();
+  ptrdiff_t M = helper.M();
+  ptrdiff_t N = helper.N();
+  ptrdiff_t K = helper.K();
 
   auto Y = context->Output(0, {M, N});
 
@@ -286,24 +288,10 @@ Status Gemm<MLFloat16>::Compute(OpKernelContext* context) const {
   const TensorShape* c_shape = C != nullptr ? &C->Shape() : nullptr;
 
   if (B) {
-    //ComputeGemm(trans_A_, trans_B_, M, N, K, alpha_, A->Data<float>(), B->Data<float>(), beta_,
-                //c_data, c_shape, y_data, thread_pool);
-    abort();
+    ComputeGemm(trans_A_, trans_B_, M, N, K, static_cast<MLFloat16>(alpha_), A->Data<MLFloat16>(), B->Data<MLFloat16>(), static_cast<MLFloat16>(beta_),
+                c_data, c_shape, y_data, thread_pool);
   } else {
-    GemmBroadcastBias(M, N, beta_, c_data, c_shape, y_data);
-    MlasGemm(
-        trans_A_,
-        static_cast<size_t>(M),
-        static_cast<size_t>(N),
-        static_cast<size_t>(K),
-        alpha_,
-        A->Data<float>(),
-        static_cast<size_t>(trans_A_ != CblasNoTrans ? M : K),
-        packed_b_.get(),
-        c_data != nullptr ? beta_ : 0.0f,
-        y_data,
-        static_cast<size_t>(N),
-        thread_pool);
+    ORT_NOT_IMPLEMENTED("This type of MLFloat16 GEMM kernel is not implemented yet");
   }
 
   ComputeActivation(y_data, SafeInt<size_t>(M) * N, thread_pool);
