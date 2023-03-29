@@ -479,6 +479,8 @@ def gpt2_to_onnx(args: argparse.Namespace):
         "10",
         "--overwrite",  # Overwrite onnx file if existed
     ]
+    if args.cache_dir:
+        arguments.extend(["--cache_dir", args.cache_dir])
     if args.use_gpu:
         arguments.append("--use_gpu")
     if args.use_external_data_format:
