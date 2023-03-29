@@ -421,6 +421,14 @@ def parse_arguments(argv: Optional[List[str]] = None) -> argparse.Namespace:
     test_group.set_defaults(disable_parity=False)
 
     test_group.add_argument(
+        "--disable_perf_test",
+        required=False,
+        action="store_true",
+        help="do not run parity test",
+    )
+    test_group.set_defaults(disable_perf_test=False)
+
+    test_group.add_argument(
         "--torch_performance",
         required=False,
         action="store_true",
@@ -1510,7 +1518,7 @@ def convert_generation_model(args: argparse.Namespace, generation_type: Generati
     past_present_share_buffer: bool = args.past_present_share_buffer
 
     logger.info(f"**** past_present_share_buffer={past_present_share_buffer}")
-    if len(args.op_block_list == 1) and args.op_block_list[0] == 'auto':
+    if len(args.op_block_list) == 1 and args.op_block_list[0] == 'auto':
         if is_gpt2 and args.precision == Precision.FLOAT16:
             args.op_block_list = ["Add", "LayerNormalization", "SkipLayerNormalization", "FastGelu"]
             logger.info(f"**** Setting op_block_list to {args.op_block_list}")
@@ -2146,8 +2154,6 @@ def test_gpt_model(args: argparse.Namespace, sentences: Optional[List[str]] = No
     print("-" * 50)
     print("Testing beam search with onnxruntime...")
 
-    ort_session = create_ort_session(args.output, args.use_gpu)
-
     if is_greedy:
         inputs = {
             "input_ids": input_ids.cpu().numpy().astype(np.int32),
@@ -2182,18 +2188,27 @@ def test_gpt_model(args: argparse.Namespace, sentences: Optional[List[str]] = No
         prefix_vocab_mask = np.ones((batch_size, vocab_size), dtype=np.int32)
         inputs["prefix_vocab_mask"] = prefix_vocab_mask
 
-    logger.debug("ORT inputs", inputs)
-    result = ort_session.run(None, inputs)
-
     if args.save_test_data:
         test_data_dir = Path(args.output).parent.as_posix()
         logger.debug("test_data_dir", test_data_dir)
         from bert_test_data import output_test_data
+        logger.info(f"Saving test_data to {test_data_dir}/test_data_set_* ...")
 
         all_inputs = [inputs]
         for i, inputs in enumerate(all_inputs):
             dir = os.path.join(test_data_dir, "test_data_set_" + str(i))
             output_test_data(dir, inputs)
+
+    logger.debug("ORT inputs", inputs)
+
+    if args.disable_perf_test:
+        return
+
+    logger.debug("Creating ort session......")
+    ort_session = create_ort_session(args.output, args.use_gpu)
+
+    logger.debug("Run ort session......")
+    result = ort_session.run(None, inputs)
 
     # Test performance
     latency = []
@@ -2360,8 +2375,6 @@ def test_t5_model(args: argparse.Namespace, sentences: Optional[List[str]] = Non
     print("-" * 50)
     print("Testing beam search with onnxruntime...")
 
-    ort_session = create_ort_session(args.output, args.use_gpu)
-
     vocab_mask = np.ones((vocab_size), dtype=np.int32)
     if args.vocab_mask:
         for bad_word_id in bad_words_ids:
@@ -2394,6 +2407,8 @@ def test_t5_model(args: argparse.Namespace, sentences: Optional[List[str]] = Non
             output_test_data(dir, inputs)
 
     logger.debug("ORT inputs", inputs)
+
+    ort_session = create_ort_session(args.output, args.use_gpu)
 
     # Test performance
     latency = []
