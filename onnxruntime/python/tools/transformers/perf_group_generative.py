@@ -134,6 +134,7 @@ def perform_group_perf(args, extra_exporting_args, perf_test_config):
     assert args.model_type == perf_test_config["model_type"]
 
     result_perf_file = os.path.join(args.workspace, "all_test_result.txt")
+    Path(args.workspace).mkdir(parents=True, exist_ok=True)
     with open(result_perf_file, "w") as freport:
         all_exporting_configs = {}
         if len(args.model_names) == 0:
