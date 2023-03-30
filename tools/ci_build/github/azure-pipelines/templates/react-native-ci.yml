@@ -21,6 +21,10 @@ parameters:
   default: 'NPM_packages'
 
 jobs:
+- task: mspremier.PostBuildCleanup.PostBuildCleanup-task.PostBuildCleanup@3
+  displayName: Clean Agent Directories
+  condition: always()
+
 - template: android-java-api-aar.yml
   parameters:
     buildConfig: '${{parameters.BuildConfig}}'
@@ -324,6 +328,4 @@ jobs:
     parameters :
       condition : 'succeeded'
 
-  - task: mspremier.PostBuildCleanup.PostBuildCleanup-task.PostBuildCleanup@3
-    displayName: Clean Agent Directories
-    condition: always()
+  - template: templates/explicitly-defined-final-tasks.yml
