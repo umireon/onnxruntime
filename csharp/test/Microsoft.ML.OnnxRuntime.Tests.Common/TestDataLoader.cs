@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.NetworkInformation;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Xunit;
 
@@ -49,19 +50,10 @@ namespace Microsoft.ML.OnnxRuntime.Tests
 
         static NamedOnnxValue LoadTensorPb(Onnx.TensorProto tensor, string nodeName, NodeMetadata nodeMeta)
         {
-            if (tensor.Name.Length > 0)
-            {
-                if (!tensor.Name.Equals(nodeName))
-                {
-                    throw new ArgumentException($"Tensor name {tensor.Name} does not match metadata name: {nodeName}");
-                }
-            }
-
             if (nodeMeta.OnnxValueType != OnnxValueType.ONNX_TYPE_TENSOR)
             {
-                // If the metadata is not a tensor, then see if it is a sequence or optional type
-                // contain or may contain a tensor
-                throw new Exception("Metadata is not a tensor");
+                throw new InvalidDataException($"Metadata for: '{nodeName}' has a type: '{nodeMeta.OnnxValueType}'" +
+                    $" but loading as tensor: '{tensor.Name}'");
             }
 
             var protoDt = (Tensors.TensorElementType)tensor.DataType;
@@ -69,12 +61,15 @@ namespace Microsoft.ML.OnnxRuntime.Tests
             if (!((protoDt == metaElementType) ||
                 (protoDt == TensorElementType.UInt16 &&
                 (metaElementType == TensorElementType.BFloat16 || metaElementType == TensorElementType.Float16))))
-                throw new Exception($"{tensor.DataType.ToString()} is expected to be equal to: {metaElementType.ToString()}");
+                throw new InvalidDataException($"{tensor.DataType} is expected to be equal to: {metaElementType}");
 
             // Tensors within Sequences may have no dimensions as the standard allows
             // different dimensions for each tensor element of the sequence
             if (nodeMeta.Dimensions.Length > 0 && nodeMeta.Dimensions.Length != tensor.Dims.Count)
-                throw new Exception($"nodeMeta.Dim.Length: {nodeMeta.Dimensions.Length} is expected to be equal to tensor.Dims.Count {tensor.Dims.Count}");
+            {
+                throw new InvalidDataException($"node: '{nodeName}' nodeMeta.Dim.Length: {nodeMeta.Dimensions.Length} " +
+                    $"is expected to be equal to tensor.Dims.Count {tensor.Dims.Count}");
+            }
 
             var intDims = new int[tensor.Dims.Count];
             for (int i = 0; i < tensor.Dims.Count; i++)
@@ -85,10 +80,12 @@ namespace Microsoft.ML.OnnxRuntime.Tests
             for (int i = 0; i < nodeMeta.Dimensions.Length; i++)
             {
                 if ((nodeMeta.Dimensions[i] != -1) && (nodeMeta.Dimensions[i] != tensor.Dims[i]))
-                    throw new Exception($"Dimension at idx {i} is {nodeMeta.Dimensions}[{i}] is expected to either be -1 or {tensor.Dims[i]}");
+                    throw new InvalidDataException($"Node: '{nodeName}' dimension at idx {i} is {nodeMeta.Dimensions}[{i}] " +
+                        $"is expected to either be -1 or {tensor.Dims[i]}");
             }
 
-            // Use element type from metadata to get the current type for FLoat16 and BFloat16
+            // element type for Float16 and BFloat16 in the loaded tensor would always be uint16, so
+            // we want to use element type from metadata
             return CreateNamedOnnxValueFromTensor(nodeName, tensor, metaElementType, intDims);
         }
 
@@ -123,9 +120,10 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                 case TensorElementType.BFloat16:
                     return CreateNamedOnnxValueFromRawData<BFloat16>(nodeName, tensor.RawData.ToArray(), sizeof(ushort), intDims);
                 case TensorElementType.String:
-                    return CreateNamedOnnxValueFromString(tensor, intDims);
+                    return CreateNamedOnnxValueFromStringTensor(tensor, nodeName, intDims);
                 default:
-                    throw new Exception($"Tensors of type: " + elementType.ToString() + " not currently supported in the LoadTensorFromEmbeddedResource");
+                    throw new InvalidDataException($"Tensors of type: " + elementType.ToString() + 
+                        " not currently supported in the LoadTensorFromEmbeddedResource");
             }
         }
 
@@ -141,6 +139,14 @@ namespace Microsoft.ML.OnnxRuntime.Tests
             }
 
             return LoadTensorPb(tensor, nodeName, nodeMeta);
+        }
+
+        private static string MakeSequenceElementName(string nodeName, string seqName, int seqNum)
+        {
+            if(seqName.Length > 0)
+                return $"{nodeName}.{seqName}.seq.{seqNum}";
+            else
+                return $"{nodeName}._.seq.{seqNum}";
         }
 
         internal static NamedOnnxValue LoadOnnxValueFromFilePb(string fullFilename, string nodeName, NodeMetadata nodeMeta)
@@ -159,17 +165,24 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                 if (nodeMeta.OnnxValueType == OnnxValueType.ONNX_TYPE_SEQUENCE)
                 {
                     var sequence = Onnx.SequenceProto.Parser.ParseFrom(file);
-                    if (sequence.ElemType == (int)OnnxValueType.ONNX_TYPE_TENSOR)
-                    {
-                        var elemMeta = nodeMeta.AsSequenceMetadata().ElementMeta;
-                        var sequenceOfTensors = new List<NamedOnnxValue>(sequence.TensorValues.Count);
-                        foreach (var tensor in sequence.TensorValues)
-                        {
-                            var namedOnnxValue = LoadTensorPb(tensor, nodeName, elemMeta);
-                            sequenceOfTensors.Add(namedOnnxValue);
-                        }
-                        return NamedOnnxValue.CreateFromSequence(nodeName, sequenceOfTensors);
-                    }
+                    return CreateNamedOnnxValueFromSequence(sequence, nodeName, nodeMeta);
+                }
+
+                if (nodeMeta.OnnxValueType == OnnxValueType.ONNX_TYPE_MAP)
+                {
+                    var map = Onnx.MapProto.Parser.ParseFrom(file);
+                    //if (map.KeyType == (int)OnnxValueType.ONNX_TYPE_STRING &&
+                    //    map.ValueType == (int)OnnxValueType.ONNX_TYPE_TENSOR)
+                    //{
+                    //    var elemMeta = nodeMeta.AsMapMetadata().ValueMeta;
+                    //    var mapOfTensors = new Dictionary<string, NamedOnnxValue>(map.StringToTensor.Count);
+                    //    foreach (var kv in map.StringToTensor)
+                    //    {
+                    //        var namedOnnxValue = LoadTensorPb(kv.Value, nodeName, elemMeta);
+                    //        mapOfTensors.Add(kv.Key, namedOnnxValue);
+                    //    }
+                    //    return NamedOnnxValue.CreateFromDictionary(nodeName, mapOfTensors);
+                    //}
                 }
             }
 
@@ -182,6 +195,92 @@ namespace Microsoft.ML.OnnxRuntime.Tests
             throw new ArgumentException($"Unable to load value type {nodeMeta.OnnxValueType} not implemented");
         }
 
+        internal static void SequenceCheckMatchTensor(string nodeName, SequenceMetadata meta, Onnx.SequenceProto sequence)
+        {
+            if (meta.ElementMeta.OnnxValueType == OnnxValueType.ONNX_TYPE_TENSOR)
+                return;
+
+            throw new InvalidDataException($"Sequence node: '{nodeName}' " +
+                $"has element type: '{(Onnx.SequenceProto.Types.DataType)sequence.ElemType}'" +
+                $" expected: '{meta.ElementMeta.OnnxValueType}'");
+        }
+
+        internal static void SequenceCheckMatchSequence(string nodeName, SequenceMetadata meta, Onnx.SequenceProto sequence)
+        {
+            if (meta.ElementMeta.OnnxValueType == OnnxValueType.ONNX_TYPE_SEQUENCE)
+                return;
+
+            throw new InvalidDataException($"Sequence node: '{nodeName}' " +
+                $"has element type: '{(Onnx.SequenceProto.Types.DataType)sequence.ElemType}'" +
+                $" expected: '{meta.ElementMeta.OnnxValueType}'");
+        }
+
+        internal static void SequenceCheckMatchMap(string nodeName, SequenceMetadata meta, Onnx.SequenceProto sequence)
+        {
+            if (meta.ElementMeta.OnnxValueType == OnnxValueType.ONNX_TYPE_MAP)
+                return;
+
+            throw new InvalidDataException($"Sequence node: '{nodeName}' " +
+                $"has element type: '{(Onnx.SequenceProto.Types.DataType)sequence.ElemType}'" +
+                $" expected: '{meta.ElementMeta.OnnxValueType}'");
+        }
+
+
+        internal static NamedOnnxValue CreateNamedOnnxValueFromSequence(Onnx.SequenceProto sequence, string nodeName, NodeMetadata nodeMeta)
+        {
+            var sequenceMeta = nodeMeta.AsSequenceMetadata();
+            var elemMeta = sequenceMeta.ElementMeta;
+
+            int seqNum = 0;
+            var seqElemType = (Onnx.SequenceProto.Types.DataType)sequence.ElemType;
+            switch (seqElemType)
+            {
+                case Onnx.SequenceProto.Types.DataType.Tensor:
+                    {
+                        SequenceCheckMatchTensor(nodeName, sequenceMeta, sequence);
+                        var sequenceOfTensors = new List<NamedOnnxValue>(sequence.TensorValues.Count);
+                        foreach (var tensor in sequence.TensorValues)
+                        {
+                            var elemName = MakeSequenceElementName(nodeName, sequence.Name, seqNum++);
+                            var namedOnnxValue = LoadTensorPb(tensor, elemName, elemMeta);
+                            sequenceOfTensors.Add(namedOnnxValue);
+                        }
+                        return NamedOnnxValue.CreateFromSequence(nodeName, sequenceOfTensors);
+                    }
+                case Onnx.SequenceProto.Types.DataType.Sequence:
+                    {
+                        SequenceCheckMatchSequence(nodeName, sequenceMeta, sequence);
+                        var seqOfSequences = new List<NamedOnnxValue>(sequence.SequenceValues.Count);
+                        foreach (var s in sequence.SequenceValues)
+                        {
+                            var elemName = MakeSequenceElementName(nodeName, sequence.Name, seqNum++);
+                            seqOfSequences.Add(CreateNamedOnnxValueFromSequence(s, elemName, elemMeta));
+                        }
+                        return NamedOnnxValue.CreateFromSequence(nodeName, seqOfSequences);
+                    }
+                default:
+                    throw new NotImplementedException($"Sequence loading does not support element type: " +
+                        $"'{(Onnx.SequenceProto.Types.DataType)sequence.ElemType}'");
+            }
+
+        }
+
+        //internal static CreateNamedOnnxValueFromMap(Onnx.MapProto map, string nodeName, NodeMetadata nodeMetadata)
+        //{
+        //    var mapMeta = nodeMetadata.AsMapMetadata();
+
+        //    if (mapMeta.KeyDataType != (TensorElementType)map.KeyType)
+        //    {
+        //        throw new InvalidDataException($"Node: '{nodeName}' map key type expected: " +
+        //                               $"'{mapMeta.KeyDataType}', loaded from test data: '{(TensorElementType)map.KeyType}'");
+        //    }
+
+        //    var valueMeta = mapMeta.ValueMetadata;
+        //    //if(map.Values.ElemType != mapMeta.ValueMetadata.OnnxValueType)
+
+
+
+        //}
         internal static NamedOnnxValue CreateNamedOnnxValueFromRawData<T>(string name, byte[] rawData, int elemWidth, int[] dimensions)
         {
             T[] typedArr = new T[rawData.Length / elemWidth];
@@ -205,7 +304,7 @@ namespace Microsoft.ML.OnnxRuntime.Tests
             return NamedOnnxValue.CreateFromTensor<T>(name, dt);
         }
 
-        internal static NamedOnnxValue CreateNamedOnnxValueFromString(Onnx.TensorProto tensor, int[] dimensions)
+        internal static NamedOnnxValue CreateNamedOnnxValueFromStringTensor(Onnx.TensorProto tensor, string nodeName, int[] dimensions)
         {
             if (tensor.DataType != (int)Onnx.TensorProto.Types.DataType.String)
             {
@@ -219,7 +318,7 @@ namespace Microsoft.ML.OnnxRuntime.Tests
             }
 
             var dt = new DenseTensor<string>(strArray, dimensions);
-            return NamedOnnxValue.CreateFromTensor<string>(tensor.Name, dt);
+            return NamedOnnxValue.CreateFromTensor<string>(nodeName, dt);
         }
 
         internal static float[] LoadTensorFromFile(string filename, bool skipheader = true)

@@ -19,7 +19,7 @@ namespace Microsoft.ML.OnnxRuntime
     /// For example, a sequence instance would contain a list of NamedOnnxValue instances
     /// that in turn may represent tensors or other ONNX values.
     /// </summary>
-    internal class ManagedOnnxType : IDisposable
+    internal class ManagedTypeProjection : IDisposable
     {
         readonly DisposableList<IDisposable> _disposables;
         readonly OrtValue _ortValue;
@@ -37,7 +37,7 @@ namespace Microsoft.ML.OnnxRuntime
         /// <param name="namedOnnxValue"></param>
         /// <param name="metadata"></param>
         /// <exception cref="OnnxRuntimeException"></exception>
-        internal ManagedOnnxType(NamedOnnxValue namedOnnxValue, NodeMetadata metadata)
+        internal ManagedTypeProjection(NamedOnnxValue namedOnnxValue, NodeMetadata metadata)
         {
             if (namedOnnxValue.ValueType != metadata.OnnxValueType)
             {
@@ -71,8 +71,8 @@ namespace Microsoft.ML.OnnxRuntime
             OrtValue result;
 
             NodeMetadata meta = metadata;
-            // Use elementmeta to create types
-            if(metadata.OnnxValueType == OnnxValueType.ONNX_TYPE_OPTIONAL)
+            // Use element meta to create types
+            if (metadata.OnnxValueType == OnnxValueType.ONNX_TYPE_OPTIONAL)
             {
                 meta = metadata.AsOptionalMetadata().ElementMeta;
             }
@@ -89,7 +89,7 @@ namespace Microsoft.ML.OnnxRuntime
                     result = CreateMapProjection(namedOnnxValue, meta, disposables);
                     break;
                 default:
-                    throw new OnnxRuntimeException(ErrorCode.InvalidArgument, "ManagedOnnxType can only project tensors, sequences, maps and optional types");
+                    throw new OnnxRuntimeException(ErrorCode.InvalidArgument, "ManagedTypeProjection can only project tensors, sequences, maps and optional types");
             }
             return result;
         }
@@ -116,8 +116,15 @@ namespace Microsoft.ML.OnnxRuntime
                                                $"NamedOnnxValue: {namedOnnxValue.Name} sequence does not contain NamedOnnxValue elements");
             }
 
+            int capacity = 0;
+
+            if (seqContainer is ICollection<NamedOnnxValue>)
+            {
+                capacity = ((ICollection<NamedOnnxValue>)seqContainer).Count;
+            }
+
             // Record all the ortValues belonging to the sequence locally
-            var sequenceOrtValues = new List<OrtValue>();
+            var sequenceOrtValues = new List<OrtValue>(capacity);
             foreach (var element in seqContainer)
             {
                 if (elementOnnxValue != element.ValueType)
@@ -135,13 +142,10 @@ namespace Microsoft.ML.OnnxRuntime
                 ortValHandles[i] = sequenceOrtValues[i].Handle;
             }
 
-            using (var memHandle = new Memory<IntPtr>(ortValHandles).Pin())
-            {
-                NativeApiStatus.VerifySuccess(NativeMethods.OrtCreateValue(ortValHandles,
-                    (UIntPtr)sequenceOrtValues.Count, (IntPtr)OnnxValueType.ONNX_TYPE_SEQUENCE, out IntPtr sequenceHandle));
-                result = new OrtValue(sequenceHandle);
-                disposables.Add(result);
-            }
+            NativeApiStatus.VerifySuccess(NativeMethods.OrtCreateValue(ortValHandles,
+                (UIntPtr)sequenceOrtValues.Count, (IntPtr)OnnxValueType.ONNX_TYPE_SEQUENCE, out IntPtr sequenceHandle));
+            result = new OrtValue(sequenceHandle);
+            disposables.Add(result);
 
             return result;
         }
@@ -204,13 +208,10 @@ namespace Microsoft.ML.OnnxRuntime
 
             // Create Map OrtValue
             IntPtr[] ortValHandles = { ortValueKeys.Handle, ortValueValues.Handle };
-            using (var pinnedHandles = new Memory<IntPtr>(ortValHandles).Pin())
-            {
-                NativeApiStatus.VerifySuccess(NativeMethods.OrtCreateValue(ortValHandles, (UIntPtr)2,
-                    (IntPtr)OnnxValueType.ONNX_TYPE_MAP, out IntPtr ortValueMap));
-                result = new OrtValue(ortValueMap);
-                disposables.Add(result);
-            }
+            NativeApiStatus.VerifySuccess(NativeMethods.OrtCreateValue(ortValHandles, (UIntPtr)2,
+                (IntPtr)OnnxValueType.ONNX_TYPE_MAP, out IntPtr ortValueMap));
+            result = new OrtValue(ortValueMap);
+            disposables.Add(result);
             return result;
         }
 

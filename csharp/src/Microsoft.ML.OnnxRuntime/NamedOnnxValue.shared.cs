@@ -194,14 +194,44 @@ namespace Microsoft.ML.OnnxRuntime
         /// </summary>
         /// <param name="pinnedMemoryHandle">dispose after returned OrtValus is disposed</param>
         /// <returns>an instance of OrtValue. The lifespan of OrtValue must overlap pinnedMemoryHandle</returns>
-        internal virtual OrtValue ToOrtValue(NodeMetadata metadata, out IDisposable memoryOwner)
+        internal virtual OrtValue InputToOrtValue(NodeMetadata metadata, out IDisposable memoryOwner)
         {
-            //var ortValue = OrtValue.CreateFromTensorObject(_value, out MemoryHandle? memoryHandle,
-            //    out _);
-            //memoryOwner = memoryHandle;
-            var projection = new ManagedOnnxType(this, metadata);
+            var projection = new ManagedTypeProjection(this, metadata);
             memoryOwner = projection;
             return projection.Value;
+        }
+
+        /// <summary>
+        /// Produces an output value for outputs. This produces an output value
+        /// only for tensors or optional types that can contain a tensor.
+        /// For all others we return a null, letting ORT to create an output value.
+        /// </summary>
+        /// <param name="metadata"></param>
+        /// <param name="memoryOwner"></param>
+        /// <returns></returns>
+        internal virtual OrtValue OutputToOrtValue(NodeMetadata metadata, out IDisposable memoryOwner)
+        {
+            // For NamedOnnxValue for output we only allow to produce OrtValue for tensors
+            // or optional type that may contain a tensor
+            if (metadata.OnnxValueType == OnnxValueType.ONNX_TYPE_TENSOR)
+            {
+                var projection = new ManagedTypeProjection(this, metadata);
+                memoryOwner = projection;
+                return projection.Value;
+            }
+
+            if (metadata.OnnxValueType == OnnxValueType.ONNX_TYPE_OPTIONAL)
+            {
+                var meta = metadata.AsOptionalMetadata().ElementMeta;
+                if (meta.OnnxValueType == OnnxValueType.ONNX_TYPE_TENSOR)
+                {
+                    var projection = new ManagedTypeProjection(this, meta);
+                    memoryOwner = projection;
+                    return projection.Value;
+                }
+            }
+            memoryOwner = null;
+            return null;
         }
 
         /// <summary>
@@ -212,7 +242,7 @@ namespace Microsoft.ML.OnnxRuntime
         /// <returns>DenseTensor<K>"</returns>
         internal Object GetDictionaryKeys()
         {
-            if(ValueType != OnnxValueType.ONNX_TYPE_MAP)
+            if (ValueType != OnnxValueType.ONNX_TYPE_MAP)
             {
                 throw new OnnxRuntimeException(ErrorCode.Fail, "This NamedOnnxValue instance does not contain a dictionary");
             }

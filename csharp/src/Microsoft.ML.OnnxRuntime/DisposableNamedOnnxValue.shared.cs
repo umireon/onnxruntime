@@ -125,10 +125,14 @@ namespace Microsoft.ML.OnnxRuntime
         /// to do, as this class maintains a native buffer via _ortValueHolder and the memory will be
         /// disposed by it. This is the case when we are dealing with an OrtValue that is backed by native memory
         /// and not by pinned managed memory.
+        /// 
+        /// This class is generally used for outputs to be created on top of the output OrtValue,
+        /// but the interface (derived from NamedOnnxValue) allows it to be passed as input and one of the test
+        /// cases does it. Unless we deprecate and re-do the interface, we must support it.
         /// </summary>
         /// <param name="pinnedMemoryHandle">always set to null</param>
         /// <returns>An instance of OrtValue that does not own underlying memory</returns>
-        internal override OrtValue ToOrtValue(NodeMetadata metadata, out IDisposable memoryHolder)
+        internal override OrtValue InputToOrtValue(NodeMetadata metadata, out IDisposable memoryHolder)
         {
             if (_ortValueHolder == null)
             {
@@ -139,6 +143,19 @@ namespace Microsoft.ML.OnnxRuntime
             memoryHolder = null;
             // Return non-owning instance of OrtValue
             return _ortValueHolder.Value;
+        }
+
+        /// <summary>
+        /// Generally, this class is created on top of the values that are returned by the model run.
+        /// So, this method is not expected to be called. However, if it is called (an instance fed as output),
+        /// it will return the OrtValue that was previously created, since the caller must understand what they are doing.
+        /// </summary>
+        /// <param name="metadata"></param>
+        /// <param name="memoryOwner"></param>
+        /// <returns></returns>
+        internal override OrtValue OutputToOrtValue(NodeMetadata metadata, out IDisposable memoryOwner)
+        {
+            return InputToOrtValue(metadata, out memoryOwner);
         }
 
         internal static DisposableNamedOnnxValue CreateFromOrtValue(string name, OrtValue ortValue)
