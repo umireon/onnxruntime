@@ -15,6 +15,7 @@ stages:
         clean: all
       variables:
         skipComponentGovernanceDetection: true
+        ORT_CCACHE_DIR: $(Pipeline.Workspace)/ccache
         TODAY: $[format('{0:dd}{0:MM}{0:yyyy}', pipeline.startTime)]
       pool: onnxruntime-Linux-CPU-2019
       steps:
@@ -46,26 +47,29 @@ stages:
         parameters:
           TODAY: $(TODAY)
           AdditionalKey: $(Build.SourceBranchName)
-          CACHE_DIR: $(Pipeline.Workspace)/ccache
+          CACHE_DIR: $(ORT_CCACHE_DIR)
           BuildStep:
             - task: CmdLine@2
               displayName: 'build'
               inputs:
                 script: |
                   mkdir -p $HOME/.onnx
-                  mkdir -p $(Pipeline.Workspace)/ccache
+                  mkdir -p $(ORT_CCACHE_DIR)
                   docker run --rm \
                     --volume /data/onnx:/data/onnx:ro \
                     --volume $(Build.SourcesDirectory):/onnxruntime_src \
                     --volume $(Build.BinariesDirectory):/build \
                     --volume $HOME/.onnx:/home/onnxruntimedev/.onnx \
-                    --volume $(Pipeline.Workspace)/ccache:/cache \
+                    --volume $(ORT_CCACHE_DIR):/cache \
                     -e ALLOW_RELEASED_ONNX_OPSET_ONLY=0 \
                     -e NIGHTLY_BUILD \
                     -e BUILD_BUILDNUMBER \
                     -e CCACHE_DIR=/cache \
                     onnxruntimecpubuild \
-                    /bin/bash -c "/opt/python/cp38-cp38/bin/python3 /onnxruntime_src/tools/ci_build/build.py \
+                    /bin/bash -c "
+                        set -ex \
+                        ccache -z \
+                         /opt/python/cp38-cp38/bin/python3 /onnxruntime_src/tools/ci_build/build.py \
                         --build_dir /build --cmake_generator Ninja \
                         --config Debug Release \
                         --skip_submodule_sync \
@@ -76,6 +80,7 @@ stages:
                         --enable_transformers_tool_test \
                         --use_cache \
                         --build_java --build_nodejs --update --build --cmake_extra_defines onnxruntime_BUILD_BENCHMARKS=ON; \
+                      ccache -s"
                 workingDirectory: $(Build.SourcesDirectory)
 
       - task: CmdLine@2

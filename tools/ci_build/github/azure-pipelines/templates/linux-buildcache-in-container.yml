@@ -23,12 +23,3 @@ steps:
     displayName: Cach Task
 
   - ${{ parameters.BuildStep }}
-
-  - script: |
-      set -ex
-      ccache -s
-      ccache -z
-      ls -l "${{ parameters.CACHE_DIR }}"
-      du -sh "${{ parameters.CACHE_DIR }}"
-    displayName: Show Cache stats and Clear stats.
-    condition: always()
