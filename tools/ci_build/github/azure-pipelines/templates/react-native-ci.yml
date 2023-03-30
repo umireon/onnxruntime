@@ -21,10 +21,6 @@ parameters:
   default: 'NPM_packages'
 
 jobs:
-- task: mspremier.PostBuildCleanup.PostBuildCleanup-task.PostBuildCleanup@3
-  displayName: Clean Agent Directories
-  condition: always()
-
 - template: android-java-api-aar.yml
   parameters:
     buildConfig: '${{parameters.BuildConfig}}'
@@ -50,6 +46,10 @@ jobs:
   - Android_Java_API_AAR_Packaging_For_React_Native
   timeoutInMinutes: 150
   steps:
+  - task: mspremier.PostBuildCleanup.PostBuildCleanup-task.PostBuildCleanup@3
+    displayName: Clean Agent Directories
+    condition: always()
+
   # Onnx has no 3.9 python package available yet, need to use python 3.8 to avoid build onnx package
   # pythonVersion can be updated in Azure pipeline settings
   # https://dev.azure.com/onnxruntime/onnxruntime/_build?definitionId=188
@@ -328,4 +328,4 @@ jobs:
     parameters :
       condition : 'succeeded'
 
-  - template: templates/explicitly-defined-final-tasks.yml
+  - template: explicitly-defined-final-tasks.yml
