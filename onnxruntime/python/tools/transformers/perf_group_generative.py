@@ -163,8 +163,8 @@ def perform_group_perf(args, extra_exporting_args, perf_test_config):
             if args.overwrite and os.path.exists(output_model_path):
                 os.remove(output_model_path)
 
+            report_message(freport, f"  ==> {exporting_cmd}")
             if not os.path.exists(output_model_path):
-                report_message(freport, f"  ==> {exporting_cmd}")
                 subprocess.run(exporting_cmd)
 
             if not os.path.exists(output_model_path):

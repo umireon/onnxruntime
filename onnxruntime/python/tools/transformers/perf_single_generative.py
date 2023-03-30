@@ -162,7 +162,7 @@ def parse_arguments(argv) -> argparse.Namespace:
         "--total_runs",
         required=False,
         type=int,
-        default=100,
+        default=10,
         help="Number of times of inference for latency measurement",
     )
 
