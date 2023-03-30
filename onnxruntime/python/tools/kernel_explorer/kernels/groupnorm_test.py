@@ -58,6 +58,7 @@ def run_group_norm(batch_size: int, height: int, num_channels: int, num_groups: 
     input_x = np.random.rand(batch_size, height, width, num_channels).astype(np.float32)
     gamma = np.random.rand(num_channels).astype(np.float32)
     beta = np.random.rand(num_channels).astype(np.float32)
+    # the size of workspace is defined in onnxruntime/contrib_ops/cuda/diffusion/group_norm_impl.h L18
     workspace = np.random.rand((np.dtype(np.float32).itemsize * 2) * 32 * 32).astype(np.float32)
     epsilon = 1e-05
     output_y = np.random.rand(batch_size, height, width, num_channels).astype(dtype)
@@ -118,7 +119,9 @@ class GroupNormNHWCMetric(ke.BandwidthMetric):
         return prefix + "not supported"
 
 
-def profile_group_norm_func(batch_size: int, height: int, width: int, num_channels: int, num_groups: int, dtype: str, func):
+def profile_group_norm_func(
+    batch_size: int, height: int, width: int, num_channels: int, num_groups: int, dtype: str, func
+):
     np.random.seed(0)
     input_x = np.random.rand(batch_size, height, width, num_channels).astype(dtype)
     gamma = np.random.rand(num_channels).astype(np.float32)
