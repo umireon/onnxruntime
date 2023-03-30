@@ -5,6 +5,9 @@ resources:
     endpoint: Microsoft
     name: pypa/manylinux
     ref: aead4d751c2101e23336aa73f2380df83e7a13f3
+
+variables:
+  TODAY: $[format('{0:dd}{0:MM}{0:yyyy}', pipeline.startTime)]
 stages:
 - stage: x64
   dependsOn: []
@@ -16,7 +19,6 @@ stages:
       variables:
         skipComponentGovernanceDetection: true
         ORT_CCACHE_DIR: $(Pipeline.Workspace)/ccache
-        TODAY: $[format('{0:dd}{0:MM}{0:yyyy}', pipeline.startTime)]
       pool: Linux-CPU-2019
       steps:
       - task: mspremier.PostBuildCleanup.PostBuildCleanup-task.PostBuildCleanup@3
@@ -68,7 +70,7 @@ stages:
                     onnxruntimecpubuild \
                     /bin/bash -c "
                       set -ex; \
-                      ccache -s; \
+                      ccache -sv; \
                       /opt/python/cp38-cp38/bin/python3 /onnxruntime_src/tools/ci_build/build.py \
                         --build_dir /build --cmake_generator Ninja \
                         --config Debug Release \
@@ -80,7 +82,7 @@ stages:
                         --enable_transformers_tool_test \
                         --use_cache \
                         --build_java --build_nodejs --update --build --cmake_extra_defines onnxruntime_BUILD_BENCHMARKS=ON; \
-                      ccache -s"
+                      ccache -sv"
                 workingDirectory: $(Build.SourcesDirectory)
 
       - task: CmdLine@2
@@ -179,6 +181,7 @@ stages:
       devtoolset_rootpath: /opt/rh/devtoolset-10/root
       ld_library_path_arg: /opt/rh/devtoolset-10/root/usr/lib64:/opt/rh/devtoolset-10/root/usr/lib:/opt/rh/devtoolset-10/root/usr/lib64/dyninst:/opt/rh/devtoolset-10/root/usr/lib/dyninst:/usr/local/lib64
       prepend_path: '/opt/rh/devtoolset-10/root/usr/bin:'
+      with_cache: true
 
 - stage: arm64_test
   dependsOn: ['arm64_build']
