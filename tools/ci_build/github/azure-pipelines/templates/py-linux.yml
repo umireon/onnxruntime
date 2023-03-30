@@ -34,7 +34,7 @@ jobs:
   variables:
     # The build machine pool doesn't have dotnet, so it can't run CG.
     skipComponentGovernanceDetection: true
-    {{ if eq(parameters.with_cache, 'true') }}:
+    ${{ if eq(parameters.with_cache, 'true') }}:
       ORT_CCACHE_DIR: $(Pipeline.Workspace)/ccache
   steps:
     - task: mspremier.PostBuildCleanup.PostBuildCleanup-task.PostBuildCleanup@3
@@ -56,31 +56,31 @@ jobs:
         ${{ if eq(parameters.arch, 'aarch64') }}:
             UpdateDepsTxt: false
 
-      {{ if eq(parameters.with_cache, 'true') }}:
-        - template: linux-buildcache-in-container.yml
-          parameters:
-            TODAY: $(TODAY)
-            AdditionalKey: $(Build.SourceBranchName)
-            CACHE_DIR: $(ORT_CCACHE_DIR)
-            BuildStep:
-              - script: |
-                  mkdir -p $(ORT_CCACHE_DIR)
-                display: create ccache directory in Host
-              - task: Bash@3
-                displayName: 'Build Python Wheel'
-                inputs:
-                  targetType: filePath
-                  filePath: tools/ci_build/github/linux/run_python_dockerbuild.sh
-                  arguments: -a "--volume $(ORT_CCACHE_DIR):/cache -e CCACHE_DIR=/cache" -i onnxruntimecpubuilpython${{ parameters.arch }} -x "${{ parameters.device }}"
-                env:
-                  ORT_BUILD_WITH_CACHE: 1
-      {{ else }}:
-        - task: Bash@3
-          displayName: 'Build Python Wheel'
-          inputs:
-            targetType: filePath
-            filePath: tools/ci_build/github/linux/run_python_dockerbuild.sh
-            arguments: -i onnxruntimecpubuilpython${{ parameters.arch }} -x "${{ parameters.device }}"
+    - ${{ if eq(parameters.with_cache, 'true') }}:
+      - template: linux-buildcache-in-container.yml
+        parameters:
+          TODAY: $(TODAY)
+          AdditionalKey: $(Build.SourceBranchName)
+          CACHE_DIR: $(ORT_CCACHE_DIR)
+          BuildStep:
+            - script: |
+                mkdir -p $(ORT_CCACHE_DIR)
+              displayName: create ccache directory in Host
+            - task: Bash@3
+              displayName: 'Build Python Wheel'
+              inputs:
+                targetType: filePath
+                filePath: tools/ci_build/github/linux/run_python_dockerbuild.sh
+                arguments: -a "--volume $(ORT_CCACHE_DIR):/cache -e CCACHE_DIR=/cache" -i onnxruntimecpubuilpython${{ parameters.arch }} -x "${{ parameters.device }}"
+              env:
+                ORT_BUILD_WITH_CACHE: 1
+    - ${{ else }}:
+      - task: Bash@3
+        displayName: 'Build Python Wheel'
+        inputs:
+          targetType: filePath
+          filePath: tools/ci_build/github/linux/run_python_dockerbuild.sh
+          arguments: -i onnxruntimecpubuilpython${{ parameters.arch }} -x "${{ parameters.device }}"
 
 
     - task: PublishBuildArtifacts@1
