@@ -1,0 +1,34 @@
+parameters:
+- name: TODAY
+  type: string
+
+- name: BuildStep
+  type: stepList
+
+- name: AdditionalKey
+  type: string
+
+- name: CACHE_DIR
+  type: string
+
+steps:
+  - task: Cache@2
+    inputs:
+      key: '"${{parameters.TODAY}}" | ${{parameters.AdditionalKey}} | "$(Build.SourceVersion)"'
+      path: ${{ parameters.CACHE_DIR }}
+      cacheHitVar: CACHE_RESTORED
+      restoreKeys: |
+        "${{parameters.TODAY}}" | ${{parameters.AdditionalKey}}
+        "${{parameters.TODAY}}" |
+    displayName: Cach Task
+
+  - ${{ parameters.BuildStep }}
+
+  - script: |
+      set -ex
+      ccache -s
+      ccache -z
+      ls -l "${{ parameters.CACHE_DIR }}"
+      du -sh "${{ parameters.CACHE_DIR }}"
+    displayName: Show Cache stats and Clear stats.
+    condition: always()
