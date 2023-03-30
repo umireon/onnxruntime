@@ -16,7 +16,8 @@ _ELEMENTWISE_OPS = {
     "Where": {"domain": "", "versions": [9, 16], "is_no_op": False, "conditions": {}},
     "Cast": {"domain": "", "versions": [6, 9, 13], "is_no_op": False, "conditions": {}},
     "Dropout": {"domain": "", "versions": [6, 9, 13], "is_no_op": False, "conditions": {}},
-    "Identity": {"domain": "", "versions": [6, 9, 13], "is_no_op": False, "conditions": {}},
+    "DropoutGrad": {"domain": "com.microsoft", "versions": [1], "is_no_op": False, "conditions": {}},
+    "Identity": {"domain": "", "versions": [6, 9, 13], "is_no_op": True, "conditions": {}},
     # "Tanh", "Erf", "Gelu", "FastGelu", "Relu", "Equal", "Not"
 }
 
@@ -26,7 +27,14 @@ _REDUCTION_OPS = {
     "ReduceMax": {"domain": "", "versions": [11, 12, 13], "is_no_op": False, "conditions": {"axes": "[-1]"}},
     "ReduceMin": {"domain": "", "versions": [11, 12, 13], "is_no_op": False, "conditions": {"axes": "[-1]"}},
     "Softmax": {"domain": "", "versions": [11, 13], "is_no_op": False, "conditions": {"axis": "-1"}},
+    "SoftmaxGrad_13": {"domain": "com.microsoft", "versions": [1], "is_no_op": False, "conditions": {"axis": "-1"}},
     "LayerNormalization": {"domain": "", "versions": [1], "is_no_op": False, "conditions": {"axis": "-1"}},
+    # "LayerNormalizationGrad": {
+    #     "domain": "com.microsoft",
+    #     "versions": [1],
+    #     "is_no_op": False,
+    #     "conditions": {"axis": "-1"},
+    # },
 }
 
 

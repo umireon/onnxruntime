@@ -29,6 +29,90 @@ using ConstNodeArgVec = InlinedVector<const NodeArg*>;
 using NodeArgSet = InlinedHashSet<NodeArg*>;
 using IsSupportedFunc = std::function<bool(const Graph&, const Node&)>;
 
+int64_t Hash(const std::string& str) {
+  uint32_t hash = 0;
+  for (char const& c : str) {
+    hash = hash * 101 + c;
+  }
+
+  return static_cast<int64_t>(hash);
+}
+
+bool CheckAxis(const Node& node, int64_t expected_axis) {
+  std::string op_type = node.OpType();
+  if (op_type != "Softmax" && op_type != "SoftmaxGrad_13" && op_type != "LayerNormalization") {
+    return false;
+  }
+
+  const auto& attributes = node.GetAttributes();
+  if (attributes.find("axis") == attributes.end() || !attributes.at("axis").has_i()) return false;
+  int64_t axis = attributes.at("axis").i();
+  if (axis == expected_axis) return true;
+  if (axis < 0 || expected_axis < 0) {
+    const auto& input_shape = node.InputDefs()[0]->Shape();
+    if (input_shape == nullptr) return false;
+    int64_t rank = static_cast<int64_t>(input_shape->dim_size());
+    if (axis < 0) axis += rank;
+    int64_t non_neg_expected_axis = expected_axis < 0 ? expected_axis + rank : expected_axis;
+    return axis == non_neg_expected_axis;
+  }
+  return false;
+}
+
+bool CheckAxes(const Graph& graph, const Node& node, const std::vector<int>& expected_axes) {
+  std::string op_type = node.OpType();
+  if (op_type != "ReduceMean" && op_type != "ReduceSum" && op_type != "ReduceMin" && op_type != "ReduceMax") {
+    return false;
+  }
+
+  std::vector<int64_t> expected_axes_values(expected_axes.begin(), expected_axes.end());
+  std::vector<int64_t> axes_values;
+  const auto& attributes = node.GetAttributes();
+  if (attributes.find("axes") != attributes.end()) {
+    axes_values = RetrieveValues<int64_t>(attributes.at("axes"));
+  } else if (node.InputDefs().size() == 2) {
+    auto axes_const = graph.GetConstantInitializer(node.InputDefs()[1]->Name(), true);
+    if (!axes_const) {
+      return false;
+    }
+    Initializer initializer{*axes_const, graph.ModelPath()};
+    axes_values.insert(axes_values.end(), initializer.DataAsSpan<int64_t>().begin(),
+                       initializer.DataAsSpan<int64_t>().end());
+  } else {
+    return false;
+  }
+
+  bool has_negative_axis = false;
+  for (auto axis : axes_values) {
+    if (axis < 0) {
+      has_negative_axis = true;
+      break;
+    }
+  }
+  if (!has_negative_axis) {
+    for (auto axis : expected_axes_values) {
+      if (axis < 0) {
+        has_negative_axis = true;
+        break;
+      }
+    }
+  }
+  if (has_negative_axis) {
+    const auto& input_shape = node.InputDefs()[0]->Shape();
+    if (input_shape == nullptr) return false;
+    int64_t rank = static_cast<int64_t>(input_shape->dim_size());
+    for (auto& axis : axes_values) {
+      if (axis < 0) axis += rank;
+    }
+    for (auto& axis : expected_axes_values) {
+      if (axis < 0) axis += rank;
+    }
+  }
+  std::sort(axes_values.begin(), axes_values.end());
+  std::sort(expected_axes_values.begin(), expected_axes_values.end());
+  return axes_values == expected_axes_values;
+}
+
 struct Partition {
   NodeVec nodes;
   NodeArgSet outputs;
@@ -73,7 +157,7 @@ TritonFusionConfig::TritonFusionConfig(std::string_view config_json) {
   }
 }
 
-bool TritonFusionConfig::IsSupported(const Node& node) const {
+bool TritonFusionConfig::IsSupported(const Graph& graph, const Node& node) const {
   const auto& op_type = node.OpType();
   if (ops.find(op_type) == ops.end()) {
     return false;
@@ -83,7 +167,23 @@ bool TritonFusionConfig::IsSupported(const Node& node) const {
   if (!graph_utils::IsSupportedOptypeVersionAndDomain(node, op_type, op_info.versions, op_info.domain)) {
     return false;
   }
-  // TODO: check attribute.
+
+  for (const auto& pair : op_info.conditions) {
+    if (pair.first == "axis") {
+      if (!CheckAxis(node, static_cast<int64_t>(std::stoi(pair.second)))) {
+        return false;
+      }
+    } else if (pair.first == "axes") {
+      const auto& axes = json::parse(pair.second);
+      std::vector<int> axes_values = axes.get<std::vector<int>>();
+      if (!CheckAxes(graph, node, axes_values)) {
+        return false;
+      }
+    } else {
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -106,7 +206,7 @@ Status TritonFusion::ApplyImpl(Graph& graph, bool& modified, int graph_level, co
     ORT_RETURN_IF_ERROR(Recurse(node, modified, graph_level, logger));
 
     bool is_supported =
-        graph_utils::IsSupportedProvider(node, GetCompatibleExecutionProviders()) && config.IsSupported(node);
+        graph_utils::IsSupportedProvider(node, GetCompatibleExecutionProviders()) && config_.IsSupported(graph, node);
     SizeTypeVec partitions_to_merge;
     for (auto& pair : partitions) {
       auto& partition = pair.second;
@@ -156,7 +256,7 @@ Status TritonFusion::ApplyImpl(Graph& graph, bool& modified, int graph_level, co
     SizeTypeVec partitions_to_erase;
     for (auto& pair : partitions) {
       if (pair.second.output_ref_count == 0) {
-        if (pair.second.IsValid(config)) {
+        if (pair.second.IsValid(config_)) {
           pair.second.outputs.clear();
           pair.second.dependencies.clear();
           partitions_to_fuse.emplace(pair);
@@ -204,52 +304,71 @@ Status TritonFusion::ApplyImpl(Graph& graph, bool& modified, int graph_level, co
     Graph& sub_graph = sub_model.MainGraph();
 
     NodeArgVec graph_inputs;
+    NodeArgVec node_outputs;
+    NodeArgSet graph_input_set;
     NodeArgSet initializers;
     ConstNodeArgVec graph_const_inputs;
-    InlinedHashMap<NodeArg*, size_t> output_ref_counts;
+    InlinedHashMap<NodeArg*, size_t> output_consumer_counts;
+    NodeArgSet no_consumer_outputs;
     for (auto& p_node : partition.nodes) {
       auto& node = *p_node;
       sub_graph.AddNode(node);
       for (auto& input : node.MutableInputDefs()) {
-        if (graph_utils::IsInitializer(graph, input->Name(), true)) {
-          if (initializers.find(input) == initializers.end()) {
-            const ONNX_NAMESPACE::TensorProto* tensor = nullptr;
-            if (graph.GetInitializedTensor(input->Name(), tensor) && tensor) {
-              initializers.emplace(input);
-              sub_graph.AddInitializedTensor(*tensor);
-              continue;
-            }
+        if (initializers.find(input) != initializers.end()) {
+          continue;
+        }
+        if (config_.initializer != "none" && graph_utils::IsInitializer(graph, input->Name(), true)) {
+          const ONNX_NAMESPACE::TensorProto* tensor = nullptr;
+          if (graph.GetInitializedTensor(input->Name(), tensor) && tensor &&
+              (config_.initializer == "all" || optimizer_utils::IsScalar(*input))) {
+            initializers.emplace(input);
+            sub_graph.AddInitializedTensor(*tensor);
+            continue;
           }
         }
 
-        if (output_ref_counts.find(input) != output_ref_counts.end()) {
-          output_ref_counts.at(input)--;
-          if (output_ref_counts.at(input) == 0) {
-            output_ref_counts.erase(input);
+        if (output_consumer_counts.find(input) != output_consumer_counts.end()) {
+          output_consumer_counts.at(input)--;
+          if (output_consumer_counts.at(input) == 0) {
+            output_consumer_counts.erase(input);
           }
-        } else {
+        } else if (graph_input_set.find(input) == graph_input_set.end()) {
           graph_inputs.emplace_back(input);
+          graph_input_set.insert(input);
           graph_const_inputs.emplace_back(input);
         }
       }
 
       for (auto it = p_node->OutputEdgesBegin(), end = p_node->OutputEdgesEnd(); it != end; ++it) {
         NodeArg* output = p_node->MutableOutputDefs()[it->GetSrcArgIndex()];
-        if (output_ref_counts.find(output) == output_ref_counts.end()) {
-          output_ref_counts.emplace(output, 1);
+        if (output_consumer_counts.find(output) == output_consumer_counts.end()) {
+          output_consumer_counts.emplace(output, 1);
         } else {
-          output_ref_counts.at(output)++;
+          output_consumer_counts.at(output)++;
+        }
+      }
+
+      for (auto& output : node.MutableOutputDefs()) {
+        if (output->Name() != "") {
+          node_outputs.emplace_back(output);
+          if (output_consumer_counts.find(output) == output_consumer_counts.end()) {
+            no_consumer_outputs.emplace(output);
+          }
         }
       }
     }
 
-    sub_graph.SetInputs(graph_const_inputs);
     NodeArgVec graph_outputs;
     ConstNodeArgVec graph_const_outputs;
-    for (auto& pair : output_ref_counts) {
-      graph_outputs.emplace_back(pair.first);
-      graph_const_outputs.emplace_back(pair.first);
+    for (auto& output : node_outputs) {
+      if (no_consumer_outputs.find(output) != no_consumer_outputs.end() ||
+          output_consumer_counts.find(output) != output_consumer_counts.end()) {
+        graph_outputs.emplace_back(output);
+        graph_const_outputs.emplace_back(output);
+      }
     }
+
+    sub_graph.SetInputs(graph_const_inputs);
     sub_graph.SetOutputs(graph_const_outputs);
 
     auto model_proto = sub_model.ToProto();
@@ -258,6 +377,7 @@ Status TritonFusion::ApplyImpl(Graph& graph, bool& modified, int graph_level, co
 
     Node& fused_node = graph.AddNode(graph.GenerateNodeName("TritonOp"), "TritonOp", "Fused nodes for TritonOp",
                                      graph_inputs, graph_outputs, {}, kMSDomain);
+    fused_node.AddAttribute("onnx_key", Hash(model_str));
     fused_node.AddAttribute("onnx_string", model_str);
     fused_node.SetExecutionProviderType(partition.nodes[0]->GetExecutionProviderType());
 

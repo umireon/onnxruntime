@@ -4099,6 +4099,7 @@ Return true if all elements are true and false otherwise.
       .SinceVersion(1)
       .SetDoc("Triton Op.")
       .Attr("func_name", "Function name of the triton kernel.", AttributeProto::STRING, std::string(""))
+      .Attr("onnx_key", "The hash key for the ONNX graph.", AttributeProto::INT, static_cast<int64_t>(0))
       .Attr("onnx_string", "The onnx string of the triton kernel.", AttributeProto::STRING, std::string(""))
       .Input(0, "inputs", "Input tensors.", "T", OpSchema::Variadic,
              /*is_homogeneous*/ false,

@@ -31,12 +31,13 @@ Status TritonOp::Compute(OpKernelContext* context) const {
   ORT_ENFORCE(TritonOpExecutor::Instance().IsInitialized());
   auto executor = TritonOpExecutor::Instance().GetExecutor();
 
-  PythonObjectPtr args(PyTuple_New(static_cast<Py_ssize_t>(2 + input_size)), PythonObjectDeleter);
+  PythonObjectPtr args(PyTuple_New(static_cast<Py_ssize_t>(3 + input_size)), PythonObjectDeleter);
   ORT_ENFORCE(args, "Failed to create input tuple.");
   PyTuple_SetItem(args.get(), 0, PyUnicode_FromString(func_name_.c_str()));
-  PyTuple_SetItem(args.get(), 1, PyBytes_FromStringAndSize(onnx_string_.c_str(), onnx_string_.size()));
+  PyTuple_SetItem(args.get(), 1, PyLong_FromLongLong(static_cast<long long>(onnx_key_)));
+  PyTuple_SetItem(args.get(), 2, PyBytes_FromStringAndSize(onnx_string_.c_str(), onnx_string_.size()));
   for (size_t i = 0; i < input_size; ++i) {
-    PyTuple_SetItem(args.get(), static_cast<Py_ssize_t>(i + 2),
+    PyTuple_SetItem(args.get(), static_cast<Py_ssize_t>(i + 3),
                     ToDlpack(*p_ctx_internal->GetInputMLValue(static_cast<int>(i))));
   }
 

@@ -3,9 +3,11 @@
 # Licensed under the MIT License.
 # --------------------------------------------------------------------------
 
+from typing import Dict
+
 import numpy as np
 
-from ._common import NP_TYPE_C_TYPE, CodeGenContext, HardwareContext, NodeVisitor, SpecialVar
+from ._common import CodeGenContext, HardwareContext, NodeVisitor, SpecialVar
 from ._ir import (
     ComputeBuffer,
     ComputeNode,
@@ -21,94 +23,7 @@ from ._ir import (
 )
 from ._lowering import GraphLowering
 from ._op_config import is_reduction_node
-
-
-def _get_type(t):
-    out_dtype = NP_TYPE_C_TYPE[t.type]
-    return out_dtype
-
-
-class MainFunctionForDebug(IRNode):
-    """
-    This class is used to generate the main function for debugging.
-    """
-
-    def __init__(self, func: FunctionNode):
-        super().__init__()
-        self.dynamic_shape = func.shape_var
-        self.func_name = func.name
-        self.in_arg_type_shape = func.input
-        self.out_arg_type_shape = func.output
-
-    def create_wrapper(self):
-        input_shapes = [i.shape.copy() for i in self.in_arg_type_shape]
-        output_shapes = [i.shape.copy() for i in self.out_arg_type_shape]
-
-        in_dynamic_shape_axis = [
-            [idx for idx, i in enumerate(in_shape) if not i.is_number] for in_shape in input_shapes
-        ]
-        out_dynamic_shape_axis = [
-            [idx for idx, i in enumerate(out_shape) if not i.is_number] for out_shape in output_shapes
-        ]
-
-        used_shape = [1, 128]
-        for input_shape, in_dy_axis in zip(input_shapes, in_dynamic_shape_axis):
-            if input_shape == []:
-                input_shape.append(1)
-                continue
-            for dy in in_dy_axis:
-                input_shape[dy] = used_shape[1]
-            if 0 in in_dy_axis:
-                input_shape[0] = 1
-
-        for output_shape, out_dy_axis in zip(output_shapes, out_dynamic_shape_axis):
-            for dy in out_dy_axis:
-                output_shape[dy] = used_shape[1]
-            if 0 in out_dy_axis:
-                output_shape[0] = 1
-
-        need_indent = " " * 4
-
-        shape_define = [need_indent + f"{sp}= {used_shape[idx%2]}\n" for idx, sp in enumerate(self.dynamic_shape)]
-        shape_define = "".join(shape_define)
-        dynamic_var = [str(vsp) for vsp in self.dynamic_shape]
-        dynamic_var = ",".join(dynamic_var)
-        if dynamic_var:
-            dynamic_var += ","
-
-        input_tensors_expr = [
-            need_indent + f"input_{i} = torch.rand({in_shape}, device='cuda')\n"
-            for i, in_shape in enumerate(input_shapes)
-        ]
-        input_tensors_expr = "".join(input_tensors_expr)
-        input_tensors_var = [f"input_{i}" for i, t in enumerate(self.in_arg_type_shape)]
-        input_tensors_var = ",".join(input_tensors_var)
-
-        output_tensors_expr = [
-            need_indent + f"output_{i} = torch.empty({out_shape}, device='cuda')\n"
-            for i, out_shape in enumerate(output_shapes)
-        ]
-        output_tensors_expr = "".join(output_tensors_expr)
-        output_tensors_var = [f"output_{i}" for i, t in enumerate(self.out_arg_type_shape)]
-        output_tensors_var = ",".join(output_tensors_var)
-
-        src_code = ""
-        src_code += f"""
-
-import torch
-if __name__ == "__main__":
-{shape_define}
-
-{input_tensors_expr}
-{output_tensors_expr}
-
-    n_elements_in_last_dim = output_0.shape[-1]
-    paralleled_blocks = output_0.numel()//n_elements_in_last_dim
-    grid = lambda meta: (paralleled_blocks* triton.cdiv(n_elements_in_last_dim, meta['RBLOCK']),)
-    {self.func_name}[grid]({input_tensors_var}, {output_tensors_var}, {dynamic_var} RBLOCK=triton.next_power_of_2(n_elements_in_last_dim))
-    print(output_0[0,0,0,:10])
-    """
-        return src_code
+from ._sorted_graph import SortedGraph
 
 
 class TritonCodeGen(NodeVisitor):
@@ -119,9 +34,6 @@ class TritonCodeGen(NodeVisitor):
         fn = getattr(self, node.__class__.__name__)
         assert fn is not None, "unimplemented node: %s" % node.__class__.__name__
         return fn(node, context, indent)
-
-    def MainFunctionForDebug(self, node: MainFunctionForDebug, context: CodeGenContext, indent: int):
-        return node.create_wrapper()
 
     def Loop(self, node: Loop, var_context: CodeGenContext, indent: int):
         var_map = var_context.var_map
@@ -335,9 +247,8 @@ from torch.utils.dlpack import to_dlpack
 """
 
         for idx, func in enumerate(node.body):
-            if not isinstance(func, MainFunctionForDebug):
-                code += f"#the {idx}th function/sub_graph\n"
-                code += "@triton.jit\n"
+            code += f"#the {idx}th function/sub_graph\n"
+            code += "@triton.jit\n"
             code += func.code_gen(self, None, indent)
         return code
 
@@ -362,7 +273,7 @@ from torch.utils.dlpack import to_dlpack
             if node.op_type == "Pow" and named_vars_i[1] == 0.5:
                 node.op_type_ = "Sqrt"
 
-            assert len(named_vars_i) in [1, 2, 3]
+            assert len(named_vars_i) in [1, 2, 3, 4]
             # I don't think we can benefit too much if we decompose dropout into rand+less+div+where
             # so currently, we just use the dropout op
             assert len(named_vars_o) == 1 or node.op_type_ == "Dropout"
@@ -397,14 +308,18 @@ from torch.utils.dlpack import to_dlpack
             elif node.op_type == "Cast":
                 from_dtype = node.input[0].dtype
                 to_dtype = node.output[0].dtype.type
-                if to_dtype == np.bool_:
+                if from_dtype == to_dtype:
+                    src_code += f"{named_var_o} = {named_vars_i[0]}\n"
+                elif to_dtype == np.bool_:
                     src_code += f"{named_var_o} = {named_vars_i[0]} != 0\n"
                 elif to_dtype == np.float32:
                     src_code += f"{named_var_o} = ({named_vars_i[0]}).to(tl.float32)\n"
                 elif to_dtype == np.float16:
                     src_code += f"{named_var_o} = ({named_vars_i[0]}).to(tl.float16)\n"
-                elif from_dtype == to_dtype:
-                    src_code += f"{named_var_o} = {named_vars_i[0]}\n"
+                elif to_dtype == np.int64:
+                    src_code += f"{named_var_o} = ({named_vars_i[0]}).to(tl.int64)\n"
+                elif to_dtype == np.uint8:
+                    src_code += f"{named_var_o} = ({named_vars_i[0]}).to(tl.uint8)\n"
                 else:
                     raise NotImplementedError(f"Cast to {to_dtype} is not supported")
             elif node.op_type == "Erf":
@@ -450,12 +365,15 @@ from torch.utils.dlpack import to_dlpack
                 # workaround for triton, if we replace seed as constant value, it would be seen as constexpr
                 # has no attr, which leads to compile err
                 src_code += f"seed = {seed}\n"
+                src_code += space_indent + f"p = 1 - {named_vars_i[1]}\n"
                 src_code += space_indent + f"random = tl.rand(seed, {annotated_out_var})\n"
-                src_code += space_indent + f"{named_var_o_mask_out} = random < {named_vars_i[1]}\n"
+                src_code += space_indent + f"{named_var_o_mask_out} = random < p\n"
                 src_code += (
-                    space_indent
-                    + f"{named_var_o} = tl.where({named_var_o_mask_out}, {named_vars_i[0]} / {named_vars_i[1]}, 0.0)\n"
+                    space_indent + f"{named_var_o} = tl.where({named_var_o_mask_out}, {named_vars_i[0]} / p, 0.0)\n"
                 )
+            elif node.op_type == "DropoutGrad":
+                src_code += f"p = 1 - {named_vars_i[2]}\n"
+                src_code += space_indent + f"{named_var_o} = tl.where({named_vars_i[1]}, {named_vars_i[0]} / p, 0.0)\n"
             elif node.op_type == "Identity":
                 src_code += f"{named_var_o} = {named_vars_i[0]}\n"
             else:
@@ -578,7 +496,8 @@ from torch.utils.dlpack import to_dlpack
                 + space_indent
                 + f"e_{annotated_var}[i_0*{SpecialVar().rblock}:(i_0+1)*{SpecialVar().rblock}] = {named_var}\n"
             )
-
+        if input_buf.shape == [] or input_buf.shape[-1] == 1:
+            return code + space_indent + f"tl.store(e_{annotated_var}, {named_var})\n"
         code += space_indent + f"roffset = {rbase} # + offset\n"
         # code += space_indent + f"{mask_name} = roffset <  tl.minimum({SpecialVar().rblock},{input_buf.shape[-1]})\n"
         mask_name = "triton_rmask"
@@ -621,14 +540,10 @@ def _init_hardware_context():
     return HardwareContext(1024)
 
 
-def codegen(models_with_name: dict, debug_mode: bool):
+def codegen(models_with_name: Dict[str, SortedGraph]) -> str:
     module = ModuleNode(models_with_name)
     graph_lower = GraphLowering()
     hardware_context = _init_hardware_context()
     module.lower(graph_lower, hardware_context)
-    if debug_mode:
-        # build a test with main function
-        module.body.append(MainFunctionForDebug(module.body[-1]))
-
     visitor = TritonCodeGen()
-    return module.code_gen(visitor, {})
+    return module.code_gen(visitor, CodeGenContext({}))

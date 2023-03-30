@@ -10,8 +10,6 @@ from enum import Enum, auto
 from typing import Dict, List, Set, Union
 
 import numpy as np
-import onnx
-import onnx.numpy_helper
 import sympy
 from sympy.codegen.rewriting import create_expand_pow_optimization
 
@@ -23,8 +21,8 @@ from ._common import (
     SpecialVar,
     parse_onnx_attributes,
 )
-from ._op_config import is_elementwise_node, is_reduction_node
-from ._sympy_utils import FloorDiv, sympy_dot, sympy_symbol
+from ._op_config import is_elementwise_node
+from ._sympy_utils import FloorDiv, TypeAndShape, sympy_dot, sympy_symbol
 
 
 class BufferAttr(Enum):
@@ -104,7 +102,7 @@ class IRNode:
         self.output: List[ComputeBuffer] = []
 
     @abstractmethod
-    def code_gen(self, visitor: NodeVisitor, var_context: CodeGenContext, indent: int = 0):
+    def code_gen(self, visitor: NodeVisitor, var_context: CodeGenContext, indent: int = 0) -> str:
         return visitor.visit(self, var_context, indent)
 
     @abstractmethod
@@ -167,7 +165,7 @@ class PostProcessBlock(Loop):
 
 
 class ExecutionBlock(IRNode):
-    def __init__(self, group: List[IRNode]):
+    def __init__(self, type_and_shape: TypeAndShape):
         super().__init__()
         self.input: list[ComputeBuffer] = []
         self.output: list[ComputeBuffer] = []
@@ -179,8 +177,8 @@ class ExecutionBlock(IRNode):
         self.recompute = False
         self.reduction_var = OrderedDict()
         # TODO support multiple outputs
-        self.dtype = list(group[0].output_with_shapes.values())[0][0]
-        self.shape = self.extract_shape(group)
+        self.dtype = type_and_shape.dtype
+        self.shape = type_and_shape.shape
         self.var_map = OrderedDict()
         # A block usually means a fused loop. In triton, it's impossible to have multiple loops in a block.
         # so a function has only one block
@@ -192,8 +190,7 @@ class ExecutionBlock(IRNode):
         self.hw_context = None
         self.connections: Dict[str, IoConnection] = OrderedDict()
         self.fused_groups: List[List[IRNode]] = []
-
-        self.group = group
+        self.group = []
 
     def analyze_io_connections(self):
         for group in self.fused_groups:
@@ -212,26 +209,6 @@ class ExecutionBlock(IRNode):
                         self.connections[out_name] = IoConnection()
                     assert len(self.connections[out_name].producers) == 0, "multiple producers!!"
                     self.connections[out_name].producers.append(g)
-        pass
-
-    def extract_shape(self, group: List[IRNode]):
-        assert len(group[-1].output_with_shapes) == 1
-        if is_reduction_node(group[-1]):
-            shape = []
-            for i in list(group[-1].input_with_shapes.values())[0][1]:
-                ri = re.sub(r"[^a-zA-Z0-9_]+", "_", i) if isinstance(i, str) else i
-                shape.append(sympy_symbol(ri))
-            self.has_reduce = True
-            self.reduction_var[group[-1].current_node.output[0]] = group[-1].op_type
-        else:
-            shape = []
-            for i in list(group[-1].output_with_shapes.values())[0][1]:
-                ri = re.sub(r"[^a-zA-Z0-9_]+", "_", i) if isinstance(i, str) else i
-                shape.append(sympy_symbol(ri))
-        # support scalar
-        if len(shape) == 0:
-            shape = [sympy_symbol(1)]
-        return shape
 
     def build_inner_most_loop(self):
         self.loop_stack.append(sympy_symbol(f"i_{str(len(self.loop_stack))}"))
@@ -300,7 +277,7 @@ class ExecutionBlock(IRNode):
         for var in self.intermediate_var:
             self.var_map[var] = legal_name(var)
         for lvar in self.load:
-            self.var_map[lvar.name] = legal_name(lvar.name)
+            self.var_map[lvar] = legal_name(lvar)
             v = self.load[lvar].data.reshape(-1) if self.load[lvar].data is not None else None
             if v is not None and v.size == 1:
                 v_v = self.var_map[lvar]
@@ -310,12 +287,8 @@ class ExecutionBlock(IRNode):
         for out in external_var:
             var = out.name
             self.var_map[var] = legal_name(var)
-            if isinstance(out, onnx.NodeProto):
-                v = onnx.numpy_helper.to_array(out.attribute[0].t).reshape(-1)
-            elif isinstance(out, onnx.TensorProto):
-                v = onnx.numpy_helper.to_array(out).reshape(-1)
-            else:
-                raise NotImplementedError
+            assert out.data is not None
+            v = out.data.reshape(-1)
             # "only support scalar"
             if v.size > 1:
                 continue
@@ -339,7 +312,7 @@ class FunctionNode(IRNode):
 
 
 class ModuleNode(IRNode):
-    def __init__(self, modules: Dict[str, onnx.ModelProto]):
+    def __init__(self, modules):
         super().__init__()
         self.body: List[FunctionNode] = []
         self.has_vectorization = False

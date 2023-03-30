@@ -452,7 +452,8 @@ class GPUSchedule(Schedule):
             loop_depth_out_1.body = nest_loops[-1].body
             loop_depth_out_1.parallel_nest_loop = nest_loops
         elif parallel_depth == 1:
-            pass
+            loop_depth_out_1: Loop = bb.body
+            loop_depth_out_1.parallel_nest_loop = [loop_depth_out_1]
         else:
             raise NotImplementedError("only support parallelize outer loop with depth 1")
 

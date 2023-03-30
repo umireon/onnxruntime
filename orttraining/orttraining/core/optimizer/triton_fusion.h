@@ -19,7 +19,7 @@ struct TritonFusionConfig {
 
   TritonFusionConfig(std::string_view config_json = "{}");
 
-  bool IsSupported(const Node& node) const;
+  bool IsSupported(const Graph& graph, const Node& node) const;
   bool IsNoOp(const Node& node) const;
 
   std::unordered_map<std::string, OpInfo> ops;
@@ -30,14 +30,14 @@ class TritonFusion : public GraphTransformer {
  public:
   TritonFusion(std::string_view config_json = "{}",
                const InlinedHashSet<std::string_view>& compatible_execution_providers = {}) noexcept
-      : GraphTransformer("TritonFusion", compatible_execution_providers), config(config_json) {}
+      : GraphTransformer("TritonFusion", compatible_execution_providers), config_(config_json) {}
 
   Status ApplyImpl(Graph& graph, bool& modified, int graph_level, const logging::Logger& logger) const override;
 
  private:
   bool IsSupportedNode(const Graph& graph, const Node& node) const;
 
-  TritonFusionConfig config;
+  TritonFusionConfig config_;
 };
 
 }  // namespace onnxruntime

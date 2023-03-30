@@ -10,7 +10,7 @@ import getpass
 import hashlib
 import os
 import tempfile
-import types
+from types import ModuleType
 
 
 @functools.lru_cache(None)
@@ -58,12 +58,12 @@ class PyCodeCache:
     clear = staticmethod(cache.clear)
 
     @classmethod
-    def load(cls, source_code):
+    def load(cls, source_code) -> ModuleType:
         key, path = _write(source_code, "py")
         if key not in cls.cache:
             with open(path) as f:
                 code = compile(f.read(), path, "exec")
-                mod = types.ModuleType(f"{__name__}.{key}")
+                mod = ModuleType(f"{__name__}.{key}")
                 mod.__file__ = path
                 mod.key = key
                 exec(code, mod.__dict__, mod.__dict__)
