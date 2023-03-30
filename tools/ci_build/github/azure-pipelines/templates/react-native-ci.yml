@@ -94,7 +94,12 @@ jobs:
           #  cd $(Build.BinariesDirectory)/ios_framework/framework_out
           #  zip -r onnxruntime-mobile-c.zip .
           displayName: Build iOS package
+          env:
+            CCACHE_DEBUG: 1
+            CCACHE_DEBUGDIR: $(System.DefaultWorkingDirectory)/ccache-debug-1
 
+  - publish: $(System.DefaultWorkingDirectory)/ccache-debug-1
+    artifact: ccache-debug-1
 
   - task: DownloadPipelineArtifact@2
     inputs:
