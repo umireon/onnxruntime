@@ -187,7 +187,7 @@ def parse_arguments(argv) -> argparse.Namespace:
     parser.add_argument(
         "--max_length", type=int, required=False, default=50, help="Max output sequence length (default 50)"
     )
-    parser.add_argument("--num_beams", type=int, required=False, default=1, help="Beam size (default 4)")
+    parser.add_argument("--num_beams", type=int, required=False, default=4, help="Beam size (default 4)")
     parser.add_argument(
         "--num_return_sequences",
         type=int,

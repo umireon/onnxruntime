@@ -120,6 +120,16 @@ def parse_arguments(argv):
         help="Directory to save and perf various models and test result, final result is saved here as perf_result.txt",
     )
 
+    parser.add_argument("--num_beams", type=int, required=False, default=4, help="Beam size (default 4)")
+
+    parser.add_argument(
+        "--num_return_sequences",
+        type=int,
+        required=False,
+        default=1,
+        help="Number of return sequence <= num_beams, default 1",
+    )
+
     args, extra = parser.parse_known_args(argv)
     return args, extra
 
@@ -155,6 +165,10 @@ def perform_group_perf(args, extra_exporting_args, perf_test_config):
                     f"{output_model_path}",
                     "-p",
                     f"{args.precision}",
+                    "--num_beams",
+                    f"{args.num_beams}",
+                    "--num_return_sequences",
+                    f"{args.num_return_sequences}",
                 ]
             )
             exporting_cmd.extend(extra_exporting_args)
@@ -184,6 +198,10 @@ def perform_group_perf(args, extra_exporting_args, perf_test_config):
                     f"{args.cache_dir}",
                     "--onnx_model",
                     f"{output_model_path}",
+                    "--num_beams",
+                    f"{args.num_beams}",
+                    "--num_return_sequences",
+                    f"{args.num_return_sequences}",
                 ]
                 perf_args.extend(perf_variant.split())
                 result, _ = parse_perf_single_generative_model(perf_args)
@@ -196,7 +214,8 @@ if __name__ == "__main__":
     #   python perf_group_generative.py --workspace ~/gpt2_greedy --cache_dir ~/cache_models --use_decoder_masked_self_attention --num_beams 1
     # Test on topp:
     #   python perf_group_generative.py --workspace ~/gpt2_topp --cache_dir ~/cache_models --num_beams 1 --top_p 0.6
-    # TODO, add Test on beam here
+    # Test on beam search 4:
+    #   python perf_group_generative.py --workspace ~/gpt2_beam4 --cache_dir ~/cache_models --num_beams 4 --use_decoder_masked_self_attention
     #
     args, extra_exporting_args = parse_arguments(sys.argv[1:])
     perform_group_perf(args, extra_exporting_args, gtp2_perf_config)
