@@ -1,3 +1,4 @@
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 /*++
 
 Copyright (c) Microsoft Corporation. All rights reserved.
