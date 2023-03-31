@@ -296,17 +296,16 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                 { "test_castlike_FLOAT_to_STRING_expanded", "string comparison does not match due to float rounding"},
                 { "test_bitshift_right_uint16", "Could not find an implementation for BitShift(11) nodeMeta with name ''"},
                 { "test_bitshift_left_uint16", "nodeMeta test error"},
-                { "test_pow_types_float32_uint64", "nodeMeta test error"},
+                { "test_pow_types_float32_uint64", "Could not find an implementation for Pow(15) node with name ''"},
                 { "test_max_uint8", "nodeMeta test error"},
                 { "test_momentum_multiple", "nodeMeta test error"},
-                { "test_pow_types_float32_uint32", "nodeMeta test error"},
-                { "test_if_seq", "sequence type is not supported in test infra."},
+                { "test_pow_types_float32_uint32", "Could not find an implementation for Pow(15) node with name ''"},
                 { "test_resize_downsample_scales_cubic_align_corners", "nodeMeta test error"},
                 { "test_einsum_batch_matmul", "nodeMeta test error"},
                 { "test_nesterov_momentum", "nodeMeta test error"},
                 { "test_min_uint16", "nodeMeta test error"},
                 { "test_adam_multiple", "nodeMeta test error"},
-                { "test_loop13_seq", "3rd input is an empty sequence. Ort errors out. [ErrorCode:Fail] Number of values should be at least 1" },
+                { "test_loop13_seq", "3rd input is an empty sequence. Ort errors out. Number of values should be at least 1" },
                 { "test_training_dropout_default_mask", "nodeMeta test error"},
                 { "test_min_int8", "nodeMeta test error"},
                 { "test_identity_sequence", "data type not supported"},
@@ -322,11 +321,9 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                 { "test_bernoulli_double_expanded", "random generator"},
                 { "test_shape", "opset15 version not implemented yet"},
                 { "test_optional_get_element", "optional type is not supported in test infra."},
-                { "test_optional_get_element_sequence", "optional type is not supported in test infra."},
                 { "test_identity_opt", "optional type is not supported in test infra." },
                 { "test_if_opt", "optional type is not supported in test infra." },
                 { "test_loop16_seq_none", "sequence type is not supported in test infra." },
-                //{ "test_sequence_map_extract_shapes", "sequence type is not supported in test infra." },
                 { "test_sequence_map_identity_1_sequence_1_tensor", "sequence type is not supported in test infra." },
                 { "test_sequence_map_identity_1_sequence_1_tensor_expanded", "sequence type is not supported in test infra." },
                 { "test_sequence_map_add_1_sequence_1_tensor", "sequence type is not supported in test infra." },
@@ -344,8 +341,8 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                 // unnecessary and fails as ORT support for Exp started at opset 6 (as ORT didn't exist until opset 7).
                 { "test_add_uint8", "Opset18 Could not find an implementation for Add(14) nodeMeta with name ''"},
                 { "test_clip_default_int8_max_expanded", "Could not find an implementation for Less(13) nodeMeta with name ''" },
-                { "test_softplus_example_expanded", "Not applicable"},
-                { "test_softplus_expanded", "Not applicable"},
+                { "test_softplus_example_expanded", "Could not find an implementation for Exp(1) node with name ''"},
+                { "test_softplus_expanded", "Could not find an implementation for Exp(1) node with name ''"},
                 { "test_div_uint8", "Could not find an implementation for Div(14) nodeMeta with name ''"},
                 { "test_col2im_pads", "due to a typo in test data"},
                 { "test_optional_has_element_empty_optional_input", "C# API doesn't support optional input"},
@@ -469,17 +466,18 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                 // captures start at index 1
                 var group = Regex.Matches(fileName, regEx).Single().Groups[1];
                 var num = int.Parse(group.Value);
-                if(num >= 0 && num < names.Count)
+                if (num >= 0 && num < names.Count)
                 {
                     nodeName = names[num];
                     result = metadata[nodeName];
                 }
-            } catch(Exception)
+            }
+            catch (Exception)
             {
                 // Either does not match or can not parse the number
             }
 
-            if(result is null)
+            if (result is null)
             {
                 // try matching the file name directly against the input/output name
                 if (!metadata.TryGetValue(fileName, out result))
@@ -560,7 +558,6 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                             foreach (var result in resultCollection)
                             {
                                 Assert.True(session.OutputMetadata.ContainsKey(result.Name));
-                                var outputMeta = session.OutputMetadata[result.Name];
                                 NamedOnnxValue outputValue = null;
                                 foreach (var o in outputContainer)
                                 {
@@ -574,13 +571,30 @@ namespace Microsoft.ML.OnnxRuntime.Tests
                                 {
                                     outputValue = outputContainer.First(); // in case the output data file does not contain the name
                                 }
-                                if (outputMeta.OnnxValueType == OnnxValueType.ONNX_TYPE_TENSOR) // Only Dense tensors now
+
+                                var outputMeta = session.OutputMetadata[result.Name];
+                                if (outputMeta.OnnxValueType == OnnxValueType.ONNX_TYPE_OPTIONAL)
                                 {
-                                    VerifyTensorResults(outputMeta.ElementDataType, result, outputValue);
+                                    outputMeta = outputMeta.AsOptionalMetadata().ElementMeta;
                                 }
-                                else
+
+                                Assert.Equal(outputValue.ValueType, outputMeta.OnnxValueType);
+
+                                switch(outputValue.ValueType)
                                 {
-                                    Assert.True(false, "TestPreTrainedModels cannot handle Onnxtype: " + outputMeta.OnnxValueType.ToString());
+                                    case OnnxValueType.ONNX_TYPE_TENSOR:  // Only Dense tensors now
+                                        {
+                                            VerifyTensorResults(outputMeta.ElementDataType, result, outputValue);
+                                        }
+                                        break;
+                                    case OnnxValueType.ONNX_TYPE_SEQUENCE:
+                                        {
+                                            VerifySequenceResults(result, outputValue, outputMeta);
+                                        }
+                                        break;
+                                    default:
+                                        Assert.True(false, $"TestPreTrainedModels cannot handle Onnxtype: {outputValue.ValueType}");
+                                        break;
                                 }
                             }
                         }
@@ -605,7 +619,36 @@ namespace Microsoft.ML.OnnxRuntime.Tests
             }
         }
 
-        private void VerifyTensorResults(TensorElementType elementType, DisposableNamedOnnxValue result, NamedOnnxValue outputValue)
+        private void VerifySequenceResults(NamedOnnxValue result, NamedOnnxValue expectedValue, NodeMetadata metaData)
+        {
+            var meta = metaData.AsSequenceMetadata();
+            var resultSequence = result.AsEnumerable<NamedOnnxValue>();
+            var expectedSequence = expectedValue.AsEnumerable<NamedOnnxValue>();
+            Assert.Equal(resultSequence.Count(), expectedSequence.Count());
+
+            foreach (var (resultItem, expectedItem) in resultSequence.Zip(expectedSequence, (r, e) => (r, e)))
+            {
+                Assert.Equal(resultItem.ValueType, expectedItem.ValueType);
+                Assert.Equal(resultItem.ValueType, meta.ElementMeta.OnnxValueType);
+                switch (resultItem.ValueType)
+                {
+                    case OnnxValueType.ONNX_TYPE_TENSOR:
+                        VerifyTensorResults(meta.ElementMeta.ElementDataType, resultItem, expectedItem);
+                        break;
+                    case OnnxValueType.ONNX_TYPE_SEQUENCE:
+                        {
+                            VerifySequenceResults(resultItem, expectedItem, meta.ElementMeta);
+                        }
+                        break;
+                    default:
+                        Assert.True(false, "VerifySequenceResults cannot handle Onnxtype: " + resultItem.ValueType.ToString());
+                        break;
+                }
+                Assert.Equal(resultItem.AsTensor<float>(), expectedItem.AsTensor<float>(), new FloatComparer());
+            }
+        }
+
+        private void VerifyTensorResults(TensorElementType elementType, NamedOnnxValue result, NamedOnnxValue outputValue)
         {
             switch (elementType)
             {

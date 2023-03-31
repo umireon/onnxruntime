@@ -76,7 +76,7 @@ namespace Microsoft.ML.OnnxRuntime
             ValueType = OnnxValueType.ONNX_TYPE_UNKNOWN;
         }
 
-        protected NamedOnnxValue(string name, Object value, OnnxValueType valueType)
+        internal NamedOnnxValue(string name, Object value, OnnxValueType valueType)
         {
             _name = name;
             _value = value;
