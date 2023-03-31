@@ -1,4 +1,6 @@
+#ifdef __GNUC__
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
 /*++
 
 Copyright (c) Microsoft Corporation. All rights reserved.
