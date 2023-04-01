@@ -1,4 +1,5 @@
-#ifdef __GNUC__
+#if !defined(__clang__) && defined(__GNUC__)
+#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 #endif
 /*++
